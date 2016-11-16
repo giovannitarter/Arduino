@@ -76,10 +76,10 @@ int dht12::read(int pin)
 
 	// WRITE TO RIGHT VARS
         // as bits[1] and bits[3] are allways zero they are omitted in formulas.
-	humidity    = bits[0]; 
-	temperature = bits[2]; 
+	humidity    = bits[0] * 10 + bits[1]; 
+	temperature = bits[2] * 10 + bits[3]; 
 
-	uint8_t sum = bits[0] + bits[2];  
+	uint8_t sum = bits[0] + bits[1] + bits[2] + bits[3];  
 
 	if (bits[4] != sum) return DHTLIB_ERROR_CHECKSUM;
 	return DHTLIB_OK;
