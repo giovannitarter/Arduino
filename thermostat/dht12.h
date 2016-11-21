@@ -35,6 +35,10 @@ public:
 	int humidity;
 	int temperature;
 };
+
+
+void getTempHum(float * temp, float * hum);
+
 #endif
 //
 // END OF FILE

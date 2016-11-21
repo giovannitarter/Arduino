@@ -1,7 +1,6 @@
 //
-//    FILE: dht11.cpp
-// VERSION: 0.4.1
-// PURPOSE: DHT11 Temperature & Humidity Sensor library for Arduino
+// FILE: dht12.cpp
+// PURPOSE: DHT12 Temperature & Humidity Sensor library for Arduino
 // LICENSE: GPL v3 (http://www.gnu.org/licenses/gpl.html)
 //
 // DATASHEET: http://www.micro4you.com/files/sensor/DHT11.pdf
@@ -20,6 +19,9 @@
 //
 
 #include "dht12.h"
+#include "configuration.h"
+
+dht12 DHT12;
 
 // Return values:
 // DHTLIB_OK
@@ -84,6 +86,32 @@ int dht12::read(int pin)
 	if (bits[4] != sum) return DHTLIB_ERROR_CHECKSUM;
 	return DHTLIB_OK;
 }
-//
-// END OF FILE
-//
+
+
+
+
+void getTempHum(float * temp, float * hum) {
+  int chk = DHT12.read(DHT12PIN);
+
+  Serial.print("Read sensor: ");
+  switch (chk)
+  {
+    case DHTLIB_OK: 
+    Serial.println("OK"); 
+    break;
+    case DHTLIB_ERROR_CHECKSUM: 
+    Serial.println("Checksum error"); 
+    break;
+    case DHTLIB_ERROR_TIMEOUT: 
+    Serial.println("Time out error"); 
+    break;
+    default: 
+    Serial.println("Unknown error"); 
+    break;
+  }
+
+  *temp = DHT12.temperature / 10.0;
+  *hum = DHT12.humidity / 10.0;
+  
+}
+
