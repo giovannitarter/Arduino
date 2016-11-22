@@ -7,14 +7,6 @@ char ssid[] = WIFI_SSID;
 char pass[] = WIFI_PASS;
 
 
-void printWifiInfo() {
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-
 void setupWifi() {
 
   // We start by connecting to a WiFi network
@@ -24,6 +16,15 @@ void setupWifi() {
 
   WiFi.begin(ssid, pass);
 
+  while (getWifiStatus() != WL_CONNECTED) {
+    delay(100);
+    Serial.print(".");  
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
 

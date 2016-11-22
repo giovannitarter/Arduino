@@ -17,5 +17,7 @@
 
 #define MAX_TOPIC 40
 
+#define SEND_DATA_PERIOD 30
+
 
 #endif

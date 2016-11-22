@@ -17,6 +17,8 @@ Ticker statusLedTck;
 Ticker dataReaderTck;
 Ticker timeoutTck;
 
+uint8_t fireSend;
+
 char temp_hostname[] = "esp8266_%s";
 char temp_outTempTopic[] = "devices/%s/temperature";
 char temp_outHumTopic[] = "devices/%s/humidity";
@@ -46,16 +48,21 @@ void setupPins() {
   pinOut(RELAY1);
 }
 
+
 void sendRelaysStatus() {
-  char tmp[4];
 
   if (getPinState(RELAY0)) {
-      client.publish("devices/switch1", "ON"); 
-      Serial.println("ON"); 
+      client.publish(outSwitch0Topic, "ON");  
   }
   else {
-    client.publish("devices/switch1", "OFF");
-    Serial.println("OFF");
+    client.publish(outSwitch0Topic, "OFF");
+  }
+
+  if (getPinState(RELAY1)) {
+      client.publish(outSwitch1Topic, "ON");  
+  }
+  else {
+    client.publish(outSwitch1Topic, "OFF");
   }
 }
 
@@ -81,52 +88,51 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 
+void callbackDataReader () {
+  fireSend = 1;
+}
+
+
 void reconnect () {
+
+  dataReaderTck.detach();
 
   clearPin(STATUS_LED);
   statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
 
   if (getWifiStatus() != WL_CONNECTED) {
     setupWifi();
-    
-    while (getWifiStatus() != WL_CONNECTED) {
-      delay(100);
-      Serial.print(".");  
-    }
   }
   
-  setupNtp();
+  //setupNtp();
   
   if (! client.connected()) {
-    client.connect("ESP8266Client");
+    client.connect(espHostname);
     sendRelaysStatus();
     client.subscribe(inSwitch0Topic);
     client.subscribe(inSwitch1Topic);
   }
   statusLedTck.detach();
   setPin(STATUS_LED);
+
+  dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
 }
 
 
-void wait(int sec) {
-  unsigned int currtime;
-  unsigned int endtime;
+void sendHumTemp() {
 
-  currtime = millis();
-  endtime = currtime + sec * 1000;
+  uint8_t temp, temp_dec, hum, hum_dec;
+  getTempHum(&temp, &temp_dec, &hum, &hum_dec);
 
-  //client.subscribe("devices/switch1/set");
+  char tmp[5];
 
-  //Serial.println("startwait");
-  //Serial.println(currtime);
-  //Serial.println(endtime);
+  snprintf(tmp, 5, "%d.%d", temp, temp_dec);
+  client.publish(outTempTopic, tmp);
+  Serial.println(tmp);
 
-  while (currtime < endtime) {
-    client.loop();
-    currtime = millis();
-  }
-
-  //Serial.println("endwait");
+  snprintf(tmp, 5, "%d.%d", hum, hum_dec);
+  client.publish(outHumTopic, tmp);
+  Serial.println(tmp);
 }
 
 
@@ -139,8 +145,6 @@ void setup()
   Serial.println();
   Serial.println();
   Serial.println("BOOT");
-
-  
 
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -181,36 +185,15 @@ void setup()
 void loop()
 {
 
-  //Serial.println("loop");
-
-  
-  
-  return;
-  
-  if (! client.connected()) {
-    client.connect("ESP8266Client");
-    sendRelaysStatus();
-    
+  if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
+    reconnect();
   }
-  
 
+  if (fireSend) {
+    sendHumTemp();
+    fireSend = 0;
+  }
 
-  
-  //unsigned long ctime = getTime();
-  //printTime(ctime);
-  
-  float temp, hum;
-  getTempHum(&temp, &hum);
+  client.loop();
 
-  char tmp[5];
-  sprintf(tmp, "%f", temp);
-  client.publish("devices/temperature", String(temp).c_str());
-  sprintf(tmp, "%f", hum);
-  client.publish("devices/humidity", String(hum).c_str());
-
-  Serial.println(temp);
-  Serial.println(hum);
-
-  
-  wait(10);
 }

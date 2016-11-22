@@ -32,12 +32,15 @@ class dht12
 {
 public:
   int read(int pin);
-	int humidity;
-	int temperature;
+	uint8_t hum;
+	uint8_t temp;
+  uint8_t hum_dec;
+  uint8_t temp_dec;
 };
 
 
-void getTempHum(float * temp, float * hum);
+void getTempHum(uint8_t * temp, uint8_t * temp_dec,
+                uint8_t * hum,  uint8_t * hum_dec); 
 
 #endif
 //

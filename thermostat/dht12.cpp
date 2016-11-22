@@ -34,6 +34,8 @@ int dht12::read(int pin)
 	uint8_t cnt = 7;
 	uint8_t idx = 0;
 
+  uint8_t sum;
+
 	// EMPTY BUFFER
 	for (int i=0; i< 5; i++) bits[i] = 0;
 
@@ -78,10 +80,12 @@ int dht12::read(int pin)
 
 	// WRITE TO RIGHT VARS
         // as bits[1] and bits[3] are allways zero they are omitted in formulas.
-	humidity    = bits[0] * 10 + bits[1]; 
-	temperature = bits[2] * 10 + bits[3]; 
+	hum = bits[0];
+  hum_dec = bits[1]; 
+	temp = bits[2];
+	temp_dec = bits[3]; 
 
-	uint8_t sum = bits[0] + bits[1] + bits[2] + bits[3];  
+	sum = bits[0] + bits[1] + bits[2] + bits[3];  
 
 	if (bits[4] != sum) return DHTLIB_ERROR_CHECKSUM;
 	return DHTLIB_OK;
@@ -90,7 +94,11 @@ int dht12::read(int pin)
 
 
 
-void getTempHum(float * temp, float * hum) {
+void getTempHum(uint8_t * temp,
+                uint8_t * temp_dec,
+                uint8_t * hum,
+                uint8_t * hum_dec) 
+{
   int chk = DHT12.read(DHT12PIN);
 
   Serial.print("Read sensor: ");
@@ -110,8 +118,9 @@ void getTempHum(float * temp, float * hum) {
     break;
   }
 
-  *temp = DHT12.temperature / 10.0;
-  *hum = DHT12.humidity / 10.0;
-  
+  *temp = DHT12.temp;
+  *temp_dec = DHT12.temp_dec;
+  *hum = DHT12.hum;
+  *hum_dec = DHT12.hum_dec;
 }
 
