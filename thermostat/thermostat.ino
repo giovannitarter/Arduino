@@ -8,6 +8,9 @@
 #include "pinio.h"
 #include "dht12.h"
 
+#define MAX_PAYLOAD 4
+#define SWITCH_ON "ON"
+#define SWITCH_OFF "OFF"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -67,7 +70,16 @@ void sendRelaysStatus() {
 }
 
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void callback(char * topic, unsigned char * payload, unsigned int length) {
+
+  char err[50];
+  char * payloadStr = (char *) payload;
+  int maxPayload = MAX_PAYLOAD;
+  
+  if (length < maxPayload) {
+    maxPayload = length;
+  }
+  
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -76,15 +88,49 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == 'O' && (char)payload[1] == 'N') {
-    setPin(RELAY0);
-  
-  } else {
-      clearPin(RELAY0);  
+  if (strcmp(topic, inSwitch0Topic) == 0) {
+    if (strncmp(payloadStr, SWITCH_ON, length) == 0) 
+    {
+      setPin(RELAY0);
+    }
+    else if (strncmp(
+      payloadStr, 
+      SWITCH_OFF, 
+      maxPayload) == 0) {
+      
+      clearPin(RELAY0);
+    }
+    else {
+      snprintf(err, 50, 
+      "wrong message \"%s\" on topic \"%s\"",
+      payload, 
+      topic);
+      Serial.println(err);
+    }
   }
+  
+  else if (strcmp(topic, inSwitch1Topic) == 0) {
+    if (strncmp(payloadStr, SWITCH_ON, maxPayload) == 0) {
+      setPin(RELAY1);
+    }
+    else if (strncmp(payloadStr, SWITCH_OFF, maxPayload) == 0) {
+      clearPin(RELAY1);
+    }
+    else {
+      snprintf(err, 50, 
+      "wrong message \"%s\" on topic \"%s\"",
+      payload, 
+      topic);
+      Serial.println(err);
+    }
+  }
+  
+  else {
+    snprintf(err, 50, "wrong topic \"%s\"", topic);
+    Serial.println(err);
+  }
+  
   sendRelaysStatus();
-
 }
 
 

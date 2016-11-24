@@ -33,6 +33,6 @@ void setPin(uint8_t pin) {
 
 
 void clearPin(uint8_t pin) {
-  digitalWrite(pin, HIGH);  
+  digitalWrite(pin, LOW);  
 }
 
