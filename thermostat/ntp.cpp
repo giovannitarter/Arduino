@@ -5,13 +5,16 @@
 #include "wireless.h"
 
 
-const char* ntpServerName = "ntp1.inrim.it";
+const char* ntpServerName = NTP_SERVER;
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 IPAddress timeServerIP; // time.nist.gov NTP server address
-byte packetBuffer[ NTP_PACKET_SIZE ]; //buffer to hold incoming and outgoing packets
-
 WiFiUDP udp;
 unsigned int localPort = 2390;      // local port to listen for UDP packets
+byte packetBuffer[ NTP_PACKET_SIZE ]; //buffer to hold incoming and outgoing packets
+
+
+unsigned long bootTime = 0;
+
 
 void setupNtp() {
 
@@ -19,6 +22,7 @@ void setupNtp() {
   udp.begin(localPort);
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
+  getTime();
   
 }
 
@@ -88,39 +92,47 @@ unsigned long getTime() {
 
   unsigned long secsSince1900 = 0;
 
-  //get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP); 
+  if (bootTime == 0) {
+  	
+	//get a random server from the pool
+  	WiFi.hostByName(ntpServerName, timeServerIP); 
 
-  sendNTPpacket(timeServerIP); // send an NTP packet to a time server
-  // wait to see if a reply is available
+  	sendNTPpacket(timeServerIP); // send an NTP packet to a time server
+  	// wait to see if a reply is available
 
-  unsigned long starttime = millis();
-  unsigned long currtime = starttime;
-  
-  while(currtime - starttime < 5000) {
-    
-    int cb = udp.parsePacket();
-    if (cb) {
-      Serial.print("packet received, length=");
-      Serial.println(cb);
-      // We've received a packet, read the data from it
-      udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+  	unsigned long starttime = millis();
+  	unsigned long currtime = starttime;
+  	
+  	while(currtime - starttime < NTP_TIMEOUT) {
+  	  
+  	  int cb = udp.parsePacket();
+  	  if (cb) {
+  	    Serial.print("packet received, length=");
+  	    Serial.println(cb);
+  	    // We've received a packet, read the data from it
+  	    udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 
-      //the timestamp starts at byte 40 of the received packet and is four bytes,
-      // or two words, long. First, esxtract the two words:
+  	    //the timestamp starts at byte 40 of the received packet and is four bytes,
+  	    // or two words, long. First, esxtract the two words:
 
-      unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-      unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-      // combine the four bytes (two words) into a long integer
-      // this is NTP time (seconds since Jan 1 1900):
-      secsSince1900 = highWord << 16 | lowWord;
-      break;
-    }
-    currtime = millis();
+  	    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+  	    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
+  	    // combine the four bytes (two words) into a long integer
+  	    // this is NTP time (seconds since Jan 1 1900):
+  	    secsSince1900 = highWord << 16 | lowWord;
+  	    break;
+  	  }
+  	  currtime = millis();
+  	}
+
+  	if (! secsSince1900) {
+  	  Serial.println("NTP TIMEOUT");
+  	}
+
+  	bootTime = secsSince1900;
   }
-
-  if (! secsSince1900) {
-    Serial.println("NTP TIMEOUT");
+  else {
+	  secsSince1900 = bootTime + millis() / 1000;
   }
   
   return secsSince1900;

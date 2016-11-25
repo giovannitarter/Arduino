@@ -8,6 +8,10 @@
 #define WIFI_PASS ""
 
 #define MQTT_SERVER "baseone.fritz.box"
+#define NTP_SERVER "ntp.inrim.it"
+
+//in msec
+#define NTP_TIMEOUT 5000 
 
 #define RELAY0 12
 #define RELAY1 13

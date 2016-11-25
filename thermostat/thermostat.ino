@@ -19,9 +19,10 @@ const char* mqtt_server = MQTT_SERVER;
 
 Ticker statusLedTck;
 Ticker dataReaderTck;
-Ticker timeoutTck;
+Ticker getTimeTck;
 
 uint8_t fireSend;
+uint8_t readTime;
 
 char temp_hostname[] = "esp8266_%s";
 char temp_outTempTopic[] = "devices/%s/temperature";
@@ -139,19 +140,23 @@ void callbackDataReader () {
   fireSend = 1;
 }
 
+void callbackGetTime() {
+  readTime = 1;	
+}
+
 
 void reconnect () {
+
+  unsigned long ctime;
 
   dataReaderTck.detach();
 
   clearPin(STATUS_LED);
   statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
 
-  if (getWifiStatus() != WL_CONNECTED) {
-    setupWifi();
-  }
+  setupWifi();
   
-  //setupNtp();
+  setupNtp();
   
   if (! client.connected()) {
     client.connect(espHostname);
@@ -163,7 +168,13 @@ void reconnect () {
   setPin(STATUS_LED);
 
   dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
+
+  ctime = getTime();
+  printTime(ctime); 
+  //getTimeTck.attach(5, callbackGetTime);
 }
+
+
 
 
 void sendHumTemp() {
@@ -231,6 +242,7 @@ void setup()
 
 void loop()
 {
+  unsigned long ctime;
 
   if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
     reconnect();
@@ -239,6 +251,12 @@ void loop()
   if (fireSend) {
     sendHumTemp();
     fireSend = 0;
+  }
+
+  if (readTime) {
+    ctime = getTime();
+    printTime(ctime);
+    readTime = 0;
   }
 
   client.loop();
