@@ -9,6 +9,8 @@ char pass[] = WIFI_PASS;
 
 void setupWifi() {
 
+  disconnectWifi();
+
   // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
@@ -25,6 +27,13 @@ void setupWifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+}
+
+
+void disconnectWifi() {
+    if (getWifiStatus() == WL_CONNECTED) {
+        WiFi.disconnect();
+    }
 }
 
 

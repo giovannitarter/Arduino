@@ -1,9 +1,13 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
 #include <PubSubClient.h>
 
-#include <ESP8266WiFi.h>
 #include <Ticker.h>
 
 #include "configuration.h"
+#include "thermostat.h"
 #include "wireless.h"
 #include "ntp.h"
 #include "pinio.h"
@@ -12,6 +16,11 @@
 #define MAX_PAYLOAD 4
 #define SWITCH_ON "ON"
 #define SWITCH_OFF "OFF"
+ 
+
+#include <ESP8266mDNS.h>
+
+
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -154,9 +163,12 @@ void reconnect () {
   clearPin(STATUS_LED);
   statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
 
-  setupWifi();
-  
-  setupNtp();
+  if (getWifiStatus() != WL_CONNECTED) {
+  	setupWifi();
+    checkOTA();
+  	setupNtp();
+	setupMDNS();
+  }
   
   if (! client.connected()) {
     client.connect(espHostname);
@@ -169,12 +181,11 @@ void reconnect () {
 
   dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
 
-  ctime = getTime();
-  printTime(ctime); 
+    ctime = getTime();
+	Serial.print("Reconnectiog at: ");
+    printTime(ctime); 
   //getTimeTck.attach(5, callbackGetTime);
 }
-
-
 
 
 void sendHumTemp() {
@@ -191,6 +202,15 @@ void sendHumTemp() {
   snprintf(tmp, 5, "%d.%d", hum, hum_dec);
   client.publish(outHumTopic, tmp);
   Serial.println(tmp);
+}
+
+
+void setupMDNS() {
+	if (!MDNS.begin("BB")) {
+    	Serial.println("Error setting up MDNS responder!");
+  	}
+  		Serial.println("mDNS responder started");
+	MDNS.addService("http", "tcp", 80); // Announce esp tcp service on port 8080
 }
 
 
