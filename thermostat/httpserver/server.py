@@ -7,27 +7,11 @@ import os
 
 PORT_NUMBER = 8000
 
-
 #This class will handles any incoming request from
 #the browser 
 class myHandler(BaseHTTPRequestHandler):
+    
     #Handler for the GET requests
-    
-#    function sendFile($path) {
-#    header($_SERVER["SERVER_PROTOCOL"].' 200 OK', true, 200);
-#    header('Content-Type: application/octet-stream', true);
-#    header('Content-Disposition: attachment; filename='.basename($path));
-#    header('Content-Length: '.filesize($path), true);
-#    header('x-MD5: '.md5_file($path), true);
-#    readfile($path);
-#}
-#
-#if(!check_header('HTTP_USER_AGENT', 'ESP8266-http-Update')) {
-#    header($_SERVER["SERVER_PROTOCOL"].' 403 Forbidden', true, 403);
-#    echo "only for ESP8266 updater!\n";
-#    exit();
-#}
-    
     def do_GET(self):
 
         print(self.headers)
@@ -50,11 +34,9 @@ class myHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-        if os.path.exists(versionpath):
-            f = open(versionpath)
-            version = f.read()
-            f.close()
-        
+        f = open(versionpath)
+        version = f.read()
+        f.close()
         fileVersion = version.strip()
         reqVersion = self.headers.get("x-ESP8266-version")
 
@@ -88,6 +70,7 @@ class myHandler(BaseHTTPRequestHandler):
 #MAIN
 
 if __name__ == "__main__":
+    
     try:
     	#Create a web server and define the handler to manage the
         #incoming request
@@ -99,4 +82,3 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
 	print '^C received, shutting down the web server'
-	server.socket.close()

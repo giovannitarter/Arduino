@@ -3,12 +3,18 @@
 #include "configuration.h"
 #include "otaupdates.h"
 
-void checkOTA() {
 
+char checkOTA(char * addr, int port) {
+
+    char res;
+    
     HTTPUpdateResult ret;
-    Serial.println("checking for updates");
-    ret = ESPhttpUpdate.update(OTA_ADDRESS,
-            OTA_PORT,
+    Serial.println("\nchecking for updates");
+    
+    res = 0;
+    ret = ESPhttpUpdate.update(
+            addr,
+            port,
             OTA_LOCATION,
             FW_VERSION);
 
@@ -27,10 +33,12 @@ void checkOTA() {
 
          case HTTP_UPDATE_OK:
             Serial.println("HTTP_UPDATE_OK");
+            res = 1;
             break;
         
         default:
             Serial.println("ERROR OTA");
             break;
     }
+    return res;
 }

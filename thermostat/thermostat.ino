@@ -12,14 +12,13 @@
 #include "ntp.h"
 #include "pinio.h"
 #include "dht12.h"
+#include "otaupdates.h"
 
 #define MAX_PAYLOAD 4
 #define SWITCH_ON "ON"
 #define SWITCH_OFF "OFF"
  
-
-#include <ESP8266mDNS.h>
-
+#include "ESP8266mDNS.h"
 
 
 WiFiClient espClient;
@@ -60,6 +59,36 @@ void setupPins() {
   pinOut(STATUS_LED);
   pinOut(RELAY0);
   pinOut(RELAY1);
+}
+
+
+void getMDNS(char * service, char * proto) {
+
+   Serial.println("Sending mDNS query");
+ 
+   int n = MDNS.queryService(service, proto); 
+    
+// Send out query for esp tcp services
+    Serial.println("mDNS query done");
+    if (n == 0) {
+        Serial.println("no services found");
+    }
+    else {
+        Serial.print(n);
+        Serial.println(" service(s) found");
+        for (int i = 0; i < n; ++i) {
+        // Print details for each service found
+        Serial.print(i + 1);
+        Serial.print(": ");
+        Serial.print(MDNS.hostname(i));
+        Serial.print(" (");
+        Serial.print(MDNS.IP(i));
+        Serial.print(":");
+        Serial.print(MDNS.port(i));
+        Serial.println(")");
+        }
+    }
+    Serial.println();
 }
 
 
@@ -154,32 +183,65 @@ void callbackGetTime() {
 }
 
 
+void checkUpdates() {
+    int resOta;
+    char otaServer[20];
+    int otaPort;
+    IPAddress ip;
+    String ipstring;
+    int resNr;
+ 
+    resOta = 0; 
+    //check zeroconf updates 
+    resNr = MDNS.queryService(OTA_SERVICE, OTA_PROTO);
+    if (resNr > 0) {
+        ip = MDNS.IP(0);
+        ipstring = ip.toString();
+        ipstring.toCharArray(otaServer, 20);
+        Serial.printf("Checking updates at %s:%d\n", 
+            otaServer, 
+            MDNS.port(0)
+        );
+        resOta = checkOTA(otaServer, MDNS.port(0));
+    }
+
+    //check static updates 
+    if (resOta == 0) {
+        Serial.printf("Checking updates at %s:%d\n", 
+            OTA_ADDRESS, 
+            OTA_PORT
+        );
+        resOta = checkOTA(OTA_ADDRESS, OTA_PORT);
+    }
+}
+
+
 void reconnect () {
 
-  unsigned long ctime;
-
-  dataReaderTck.detach();
-
-  clearPin(STATUS_LED);
-  statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
-
-  if (getWifiStatus() != WL_CONNECTED) {
-  	setupWifi();
-    checkOTA();
-  	setupNtp();
-	setupMDNS();
-  }
+    unsigned long ctime;
   
-  if (! client.connected()) {
-    client.connect(espHostname);
-    sendRelaysStatus();
-    client.subscribe(inSwitch0Topic);
-    client.subscribe(inSwitch1Topic);
-  }
-  statusLedTck.detach();
-  setPin(STATUS_LED);
-
-  dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
+    dataReaderTck.detach();
+  
+    clearPin(STATUS_LED);
+    statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
+  
+    if (getWifiStatus() != WL_CONNECTED) {
+    	setupWifi();
+        setupMDNS();
+        checkUpdates();
+        setupNtp();
+    }
+    
+    if (! client.connected()) {
+      client.connect(espHostname);
+      sendRelaysStatus();
+      client.subscribe(inSwitch0Topic);
+      client.subscribe(inSwitch1Topic);
+    }
+    statusLedTck.detach();
+    setPin(STATUS_LED);
+  
+    dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
 
     ctime = getTime();
 	Serial.print("Reconnectiog at: ");
@@ -257,6 +319,7 @@ void setup()
   
   setupPins();
   reconnect();
+  fireSend = 1;
 }
 
 
@@ -280,5 +343,4 @@ void loop()
   }
 
   client.loop();
-
 }
