@@ -92,7 +92,7 @@ unsigned long getTime() {
 
   unsigned long secsSince1900 = 0;
 
-  if (bootTime == 0) {
+  if (bootTime == 0 && getWifiStatus() == WL_CONNECTED) {
   	
 	//get a random server from the pool
   	WiFi.hostByName(ntpServerName, timeServerIP); 
@@ -128,8 +128,9 @@ unsigned long getTime() {
   	if (! secsSince1900) {
   	  Serial.println("NTP TIMEOUT");
   	}
-
-  	bootTime = secsSince1900;
+    else {
+        bootTime = secsSince1900;
+    }
   }
   else {
 	  secsSince1900 = bootTime + millis() / 1000;

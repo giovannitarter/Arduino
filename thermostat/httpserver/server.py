@@ -4,6 +4,7 @@ from os import curdir, sep
 import md5
 import os
 
+import subprocess as sb
 
 PORT_NUMBER = 8000
 
@@ -53,6 +54,7 @@ class myHandler(BaseHTTPRequestHandler):
 
         m = md5.new()
         m.update(buff)
+        print("NEEDS UPDATE")
         print(str(m.hexdigest()))
 
         self.send_response(200)
@@ -64,13 +66,15 @@ class myHandler(BaseHTTPRequestHandler):
         self.send_header("x-MD5", str(m.hexdigest())) 
         self.end_headers()
         self.wfile.write(buff)
+        buff = None
         return
 
 
 #MAIN
 
 if __name__ == "__main__":
-    
+
+    sb.Popen(["avahi-publish -s \"EspUpdater $(hostname)\" _esp._tcp 8000 \"AAAA\""], shell=True)
     try:
     	#Create a web server and define the handler to manage the
         #incoming request

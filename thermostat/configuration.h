@@ -5,15 +5,20 @@
 #define WIFI_SSID "GNET"
 #define WIFI_PASS ""
 
-#define MQTT_SERVER "baseone.fritz.box"
+#define MAX_ADDR 20
+
+#define MQTT_SERVICE "mqtt"
+#define MQTT_PROTO "tcp"
+#define MQTT_SERVER "baseone"
+#define MQTT_PORT 1883
 #define NTP_SERVER "ntp.inrim.it"
 
+#define OTA_SERVICE "espupdater"
+#define OTA_PROTO "tcp"
 #define OTA_ADDRESS MQTT_SERVER
 #define OTA_PORT 8000
 #define OTA_LOCATION "/thermostat.bin"
 
-#define OTA_PROTO "tcp"
-#define OTA_SERVICE "esp"
 
 #ifndef FW_VERSION
 #define FW_VERSION "-1"

@@ -18,12 +18,16 @@
 #define SWITCH_ON "ON"
 #define SWITCH_OFF "OFF"
  
-#include "ESP8266mDNS.h"
+#include <ESP8266mDNS.h>
 
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-const char* mqtt_server = MQTT_SERVER;
+
+char otaAddr[MAX_ADDR];
+uint16_t otaPort;
+char mqttAddr[MAX_ADDR];
+uint16_t mqttPort;
 
 Ticker statusLedTck;
 Ticker dataReaderTck;
@@ -32,7 +36,7 @@ Ticker getTimeTck;
 uint8_t fireSend;
 uint8_t readTime;
 
-char temp_hostname[] = "esp8266_%s";
+char temp_hostname[] = "%s";
 char temp_outTempTopic[] = "devices/%s/temperature";
 char temp_outHumTopic[] = "devices/%s/humidity";
 char temp_outSwitchTopic[] = "devices/%s/switch%d/state";
@@ -184,35 +188,12 @@ void callbackGetTime() {
 
 
 void checkUpdates() {
-    int resOta;
-    char otaServer[20];
-    int otaPort;
-    IPAddress ip;
-    String ipstring;
-    int resNr;
- 
-    resOta = 0; 
-    //check zeroconf updates 
-    resNr = MDNS.queryService(OTA_SERVICE, OTA_PROTO);
-    if (resNr > 0) {
-        ip = MDNS.IP(0);
-        ipstring = ip.toString();
-        ipstring.toCharArray(otaServer, 20);
-        Serial.printf("Checking updates at %s:%d\n", 
-            otaServer, 
-            MDNS.port(0)
+    Serial.printf(
+        "Checking updates at %s:%d\n", 
+        otaAddr, 
+        otaPort
         );
-        resOta = checkOTA(otaServer, MDNS.port(0));
-    }
-
-    //check static updates 
-    if (resOta == 0) {
-        Serial.printf("Checking updates at %s:%d\n", 
-            OTA_ADDRESS, 
-            OTA_PORT
-        );
-        resOta = checkOTA(OTA_ADDRESS, OTA_PORT);
-    }
+    checkOTA(otaAddr, otaPort);
 }
 
 
@@ -224,28 +205,51 @@ void reconnect () {
   
     clearPin(STATUS_LED);
     statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
+    
+    ctime = getTime();
+	Serial.print("Reconnecting at: ");
+    printTime(ctime); 
   
     if (getWifiStatus() != WL_CONNECTED) {
-    	setupWifi();
+        Serial.println("Reconnecting Wifi");
+    	
+        setupWifi();
         setupMDNS();
-        checkUpdates();
         setupNtp();
     }
-    
-    if (! client.connected()) {
-      client.connect(espHostname);
-      sendRelaysStatus();
-      client.subscribe(inSwitch0Topic);
-      client.subscribe(inSwitch1Topic);
+    else {
+        Serial.println("Wifi already connected");
     }
+    
+     
+    Serial.println("Trying to resolve MQTT addr"); 
+    resolveZeroConf(MQTT_SERVICE, MQTT_PROTO,
+                    MQTT_SERVER, MQTT_PORT,
+                    mqttAddr, &mqttPort
+                    );
+   
+    client.setServer(mqttAddr, mqttPort);
+
+    if (client.connected() == 0) {
+        
+        Serial.println("Reconnecting MQTT");
+        client.connect(espHostname);
+        if (client.connected()) {
+            sendRelaysStatus();
+            client.subscribe(inSwitch0Topic);
+            client.subscribe(inSwitch1Topic);
+            dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
+        }
+        else {
+            Serial.println("MQTT connection failed");
+            delay(5000);
+        }
+    }
+    
+
     statusLedTck.detach();
     setPin(STATUS_LED);
   
-    dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
-
-    ctime = getTime();
-	Serial.print("Reconnectiog at: ");
-    printTime(ctime); 
   //getTimeTck.attach(5, callbackGetTime);
 }
 
@@ -268,11 +272,54 @@ void sendHumTemp() {
 
 
 void setupMDNS() {
-	if (!MDNS.begin("BB")) {
-    	Serial.println("Error setting up MDNS responder!");
+
+    if (MDNS.begin(espHostname)) {
+  	    Serial.println("mDNS responder started");
   	}
-  		Serial.println("mDNS responder started");
-	MDNS.addService("http", "tcp", 80); // Announce esp tcp service on port 8080
+    else {
+    	Serial.println("Error setting up MDNS responder!");
+    }
+	MDNS.addService("esp", "tcp", 1883);
+}
+
+#define MAX_ADDR 20
+
+void resolveZeroConf(
+    char * service, 
+    char * proto, 
+    char * fallbackAddr,
+    uint16_t fallbackPort,
+    char * addr,
+    uint16_t * port
+    )
+{
+    int resNr;
+    String strAddr;
+    IPAddress tmpIp;
+ 
+    resNr = MDNS.queryService(service, proto);
+    if (resNr > 0) {
+
+        strAddr = MDNS.IP(0).toString();
+        *port = MDNS.port(0);
+        
+        strAddr.toCharArray(addr, MAX_ADDR);
+
+        Serial.println("ZeroConf Service resolved");
+        Serial.println(addr);
+        Serial.println(*port);
+    }
+    else {
+        WiFi.hostByName(fallbackAddr, tmpIp);
+        strAddr = tmpIp.toString();
+        strAddr.toCharArray(addr, MAX_ADDR);
+        *port = fallbackPort;
+        
+        Serial.println("ZeroConf Service not found.");
+        Serial.println("Falling back to:");
+        Serial.println(addr);
+        Serial.println(*port);
+    }
 }
 
 
@@ -284,9 +331,8 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   Serial.println();
-  Serial.println("BOOT");
+  Serial.println("\r\r\nBOOT");
 
-  client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
   Serial.print("MAC: ");
@@ -319,6 +365,16 @@ void setup()
   
   setupPins();
   reconnect();
+    
+  Serial.println("Trying to resolve OTA updates addr"); 
+  resolveZeroConf(
+        OTA_SERVICE, OTA_PROTO,
+        OTA_ADDRESS, OTA_PORT,
+        otaAddr, &otaPort
+        );
+  
+  checkUpdates();
+  
   fireSend = 1;
 }
 

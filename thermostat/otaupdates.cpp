@@ -4,7 +4,7 @@
 #include "otaupdates.h"
 
 
-char checkOTA(char * addr, int port) {
+char checkOTA(char * addr, uint16_t port) {
 
     char res;
     
