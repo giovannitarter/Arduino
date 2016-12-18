@@ -204,6 +204,9 @@ void reconnect () {
     dataReaderTck.detach();
   
     clearPin(STATUS_LED);
+    clearPin(RELAY0);
+    clearPin(RELAY1);
+
     statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
     
     ctime = getTime();
@@ -268,6 +271,8 @@ void sendHumTemp() {
   snprintf(tmp, 5, "%d.%d", hum, hum_dec);
   client.publish(outHumTopic, tmp);
   Serial.println(tmp);
+            
+  sendRelaysStatus();
 }
 
 
