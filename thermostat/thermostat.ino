@@ -32,16 +32,17 @@ uint16_t mqttPort;
 Ticker statusLedTck;
 Ticker dataReaderTck;
 Ticker getTimeTck;
+Ticker sendDiscoveryTck;
 
 uint8_t fireSend;
 uint8_t readTime;
+uint8_t fireDiscovery;
 
 char temp_hostname[] = "%s";
 char temp_outTempTopic[] = "devices/%s/temperature";
 char temp_outHumTopic[] = "devices/%s/humidity";
 char temp_outSwitchTopic[] = "devices/%s/switch%d/state";
 char temp_inSwitchTopic[] = "devices/%s/switch%d/cmd";
-
 
 char espHostname[MAX_TOPIC];
 char outTempTopic[MAX_TOPIC];
@@ -51,6 +52,7 @@ char inSwitch0Topic[MAX_TOPIC];
 char outSwitch1Topic[MAX_TOPIC];
 char inSwitch1Topic[MAX_TOPIC];
 
+char discoveryTopic[] = "espdiscovery";
 
 long lastMsg = 0;
 char msg[50];
@@ -182,6 +184,10 @@ void callbackDataReader () {
   fireSend = 1;
 }
 
+void callbackDiscovery () {
+  fireDiscovery = 1;
+}
+
 void callbackGetTime() {
   readTime = 1;	
 }
@@ -202,6 +208,7 @@ void reconnect () {
     unsigned long ctime;
   
     dataReaderTck.detach();
+    sendDiscoveryTck.detach();
   
     clearPin(STATUS_LED);
     clearPin(RELAY0);
@@ -238,10 +245,16 @@ void reconnect () {
         Serial.println("Reconnecting MQTT");
         client.connect(espHostname);
         if (client.connected()) {
-            sendRelaysStatus();
+            
             client.subscribe(inSwitch0Topic);
             client.subscribe(inSwitch1Topic);
+            
+            sendRelaysStatus();
+            
             dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
+            
+            sendDiscovery();
+            sendDiscoveryTck.attach(DISCOVERY_PERIOD, callbackDiscovery);
         }
         else {
             Serial.println("MQTT connection failed");
@@ -254,6 +267,14 @@ void reconnect () {
     setPin(STATUS_LED);
   
   //getTimeTck.attach(5, callbackGetTime);
+}
+
+
+void sendDiscovery() {
+    Serial.println("Sending discovery");
+    if (client.connected()) {
+        client.publish(discoveryTopic, espHostname);
+    }
 }
 
 
@@ -284,7 +305,7 @@ void setupMDNS() {
     else {
     	Serial.println("Error setting up MDNS responder!");
     }
-	MDNS.addService("esp", "tcp", 1883);
+	//MDNS.addService("esp", "tcp", 1883);
 }
 
 #define MAX_ADDR 20
@@ -302,7 +323,8 @@ void resolveZeroConf(
     String strAddr;
     IPAddress tmpIp;
  
-    resNr = MDNS.queryService(service, proto);
+    //resNr = MDNS.queryService(service, proto);
+    resNr = 0;
     if (resNr > 0) {
 
         strAddr = MDNS.IP(0).toString();
@@ -342,6 +364,16 @@ void setup()
 
   Serial.print("MAC: ");
   getMac(myMac);
+
+    
+  Serial.print("\n");
+  for (i=0; i<6; i++) {
+    Serial.print(myMac[i],HEX);
+    Serial.print(" ");
+    
+  }
+  Serial.print("\n");
+
   macToString(myMac, macStr);
   Serial.println(macStr);
 
@@ -386,7 +418,9 @@ void setup()
 
 void loop()
 {
+
   unsigned long ctime;
+
 
   if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
     reconnect();
@@ -395,6 +429,11 @@ void loop()
   if (fireSend) {
     sendHumTemp();
     fireSend = 0;
+  }
+
+  if (fireDiscovery) {
+    sendDiscovery();
+    fireDiscovery = 0;
   }
 
   if (readTime) {

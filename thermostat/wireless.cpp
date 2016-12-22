@@ -56,7 +56,7 @@ void macToString(uint8_t mac_int[6], char mac_str[13]) {
   ptr = mac_str;
   
   for(i=0; i<6; i++) {
-    sprintf(ptr, "%x", mac_int[i]);
+    sprintf(ptr, "%02x", mac_int[i]);
     ptr += 2;
   }
   

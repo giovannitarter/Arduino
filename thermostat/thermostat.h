@@ -3,6 +3,7 @@
 
 void setupMDNS();
 void discoverMqttServer();
+void sendDiscovery();
 
 void resolveZeroConf(
     char * service, 

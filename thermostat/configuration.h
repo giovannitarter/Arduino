@@ -1,15 +1,15 @@
 #ifndef _CONFIGURATION_THERMOSTAT_H_
 #define _CONFIGURATION_THERMOSTAT_H_
 
+#include "wificreds.h"
 
-#define WIFI_SSID "GNET"
-#define WIFI_PASS ""
 
 #define MAX_ADDR 20
 
 #define MQTT_SERVICE "mqtt"
 #define MQTT_PROTO "tcp"
-#define MQTT_SERVER "baseone"
+//#define MQTT_SERVER "baseone"
+#define MQTT_SERVER "192.168.1.20"
 #define MQTT_PORT 1883
 #define NTP_SERVER "ntp.inrim.it"
 
@@ -19,6 +19,7 @@
 #define OTA_PORT 8000
 #define OTA_LOCATION "/thermostat.bin"
 
+#define DISCOVERY_PERIOD 60
 
 #ifndef FW_VERSION
 #define FW_VERSION "-1"

@@ -1,1 +1,7 @@
-*VERSION
+*.swp
+wificreds.h
+out
+.version
+*.bin
+*.version
+old
