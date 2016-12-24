@@ -8,8 +8,8 @@
 
 #define MQTT_SERVICE "mqtt"
 #define MQTT_PROTO "tcp"
-//#define MQTT_SERVER "baseone"
-#define MQTT_SERVER "192.168.1.20"
+#define MQTT_SERVER "baseone"
+//#define MQTT_SERVER "192.168.1.20"
 #define MQTT_PORT 1883
 #define NTP_SERVER "ntp.inrim.it"
 

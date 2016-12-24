@@ -37,6 +37,8 @@ Ticker sendDiscoveryTck;
 uint8_t fireSend;
 uint8_t readTime;
 uint8_t fireDiscovery;
+uint8_t fireSendRelay;
+
 
 char temp_hostname[] = "%s";
 char temp_outTempTopic[] = "devices/%s/temperature";
@@ -53,6 +55,7 @@ char outSwitch1Topic[MAX_TOPIC];
 char inSwitch1Topic[MAX_TOPIC];
 
 char discoveryTopic[] = "espdiscovery";
+char resetTopic[] = "espreset";
 
 long lastMsg = 0;
 char msg[50];
@@ -60,6 +63,9 @@ int value = 0;
 
 uint8_t myMac[6];
 char macStr[13];
+  
+unsigned long my_ctime;
+
 
 void setupPins() {
   pinOut(STATUS_LED);
@@ -171,12 +177,17 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
     }
   }
   
+  else if (strcmp(topic, resetTopic) == 0) {
+        Serial.println("Reset received, reset");
+        ESP.restart();
+  }
+  
   else {
     snprintf(err, 50, "wrong topic \"%s\"", topic);
     Serial.println(err);
   }
-  
-  sendRelaysStatus();
+ 
+    fireSendRelay = 1;
 }
 
 
@@ -184,9 +195,11 @@ void callbackDataReader () {
   fireSend = 1;
 }
 
+
 void callbackDiscovery () {
   fireDiscovery = 1;
 }
+
 
 void callbackGetTime() {
   readTime = 1;	
@@ -200,13 +213,12 @@ void checkUpdates() {
         otaPort
         );
     checkOTA(otaAddr, otaPort);
-}
+} 
 
 
 void reconnect () {
 
-    unsigned long ctime;
-  
+    int i;
     dataReaderTck.detach();
     sendDiscoveryTck.detach();
   
@@ -216,9 +228,9 @@ void reconnect () {
 
     statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
     
-    ctime = getTime();
+    my_ctime = getTime();
 	Serial.print("Reconnecting at: ");
-    printTime(ctime); 
+    printTime(my_ctime); 
   
     if (getWifiStatus() != WL_CONNECTED) {
         Serial.println("Reconnecting Wifi");
@@ -230,9 +242,18 @@ void reconnect () {
     else {
         Serial.println("Wifi already connected");
     }
+  
+    Serial.println("\n\rTrying to resolve OTA updates addr"); 
+    resolveZeroConf(
+        OTA_SERVICE, OTA_PROTO,
+        OTA_ADDRESS, OTA_PORT,
+        otaAddr, &otaPort
+        );
+  
     
+    checkUpdates();
      
-    Serial.println("Trying to resolve MQTT addr"); 
+    Serial.println("\n\rTrying to resolve MQTT addr"); 
     resolveZeroConf(MQTT_SERVICE, MQTT_PROTO,
                     MQTT_SERVER, MQTT_PORT,
                     mqttAddr, &mqttPort
@@ -248,13 +269,19 @@ void reconnect () {
             
             client.subscribe(inSwitch0Topic);
             client.subscribe(inSwitch1Topic);
-            
-            sendRelaysStatus();
-            
+            client.subscribe(resetTopic);
+           
+            for (i=0; i<5; i++) {
+                delay(1000);
+                client.loop();
+            }
+ 
             dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
-            
-            sendDiscovery();
             sendDiscoveryTck.attach(DISCOVERY_PERIOD, callbackDiscovery);
+            
+            fireDiscovery = 1;
+            fireSend = 1; 
+            fireSendRelay = 1; 
         }
         else {
             Serial.println("MQTT connection failed");
@@ -265,7 +292,7 @@ void reconnect () {
 
     statusLedTck.detach();
     setPin(STATUS_LED);
-  
+    Serial.println("INIT END\n\n\n");
   //getTimeTck.attach(5, callbackGetTime);
 }
 
@@ -273,7 +300,7 @@ void reconnect () {
 void sendDiscovery() {
     Serial.println("Sending discovery");
     if (client.connected()) {
-        client.publish(discoveryTopic, espHostname);
+        client.publish(discoveryTopic, espHostname, false);
     }
 }
 
@@ -308,7 +335,6 @@ void setupMDNS() {
 	//MDNS.addService("esp", "tcp", 1883);
 }
 
-#define MAX_ADDR 20
 
 void resolveZeroConf(
     char * service, 
@@ -323,8 +349,7 @@ void resolveZeroConf(
     String strAddr;
     IPAddress tmpIp;
  
-    //resNr = MDNS.queryService(service, proto);
-    resNr = 0;
+    resNr = MDNS.queryService(service, proto);
     if (resNr > 0) {
 
         strAddr = MDNS.IP(0).toString();
@@ -352,93 +377,83 @@ void resolveZeroConf(
 
 void setup()
 {
-  int i;
-  char * ptr;
-  
-  Serial.begin(115200);
-  Serial.println();
-  Serial.println();
-  Serial.println("\r\r\nBOOT");
-
-  client.setCallback(callback);
-
-  Serial.print("MAC: ");
-  getMac(myMac);
-
+    int i;
+    char * ptr;
     
-  Serial.print("\n");
-  for (i=0; i<6; i++) {
-    Serial.print(myMac[i],HEX);
-    Serial.print(" ");
+    fireSend = 0;
+    readTime = 0;
+    fireDiscovery = 0;
+    fireSendRelay = 0;
+  
+    Serial.begin(115200);
+    Serial.println();
+    Serial.println();
+    Serial.println("\n\n\n\rBOOT");
+  
+    client.setCallback(callback);
+  
+    Serial.print("MAC: ");
+    getMac(myMac);
+    macToString(myMac, macStr);
+    Serial.println(macStr);
+  
+    Serial.print("HOSTANAME: ");
+    snprintf(espHostname, MAX_TOPIC, temp_hostname, macStr);
+    Serial.println(espHostname);
+  
+    Serial.println("Topics:");
+    snprintf(outTempTopic, MAX_TOPIC, temp_outTempTopic, macStr);
+    Serial.println(outTempTopic);
     
-  }
-  Serial.print("\n");
-
-  macToString(myMac, macStr);
-  Serial.println(macStr);
-
-  Serial.print("HOSTANAME: ");
-  snprintf(espHostname, MAX_TOPIC, temp_hostname, macStr);
-  Serial.println(espHostname);
-
-  Serial.println("Topics:");
-  snprintf(outTempTopic, MAX_TOPIC, temp_outTempTopic, macStr);
-  Serial.println(outTempTopic);
-  
-  snprintf(outHumTopic, MAX_TOPIC, temp_outHumTopic, macStr);
-  Serial.println(outHumTopic);
-  
-  snprintf(inSwitch0Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 0);
-  Serial.println(inSwitch0Topic);
-  
-  snprintf(inSwitch1Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 1);
-  Serial.println(inSwitch1Topic);
-  
-  snprintf(outSwitch0Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 0);
-  Serial.println(outSwitch0Topic);
-  
-  snprintf(outSwitch1Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 1);
-  Serial.println(outSwitch1Topic);
-  
-  setupPins();
-  reconnect();
+    snprintf(outHumTopic, MAX_TOPIC, temp_outHumTopic, macStr);
+    Serial.println(outHumTopic);
     
-  Serial.println("Trying to resolve OTA updates addr"); 
-  resolveZeroConf(
-        OTA_SERVICE, OTA_PROTO,
-        OTA_ADDRESS, OTA_PORT,
-        otaAddr, &otaPort
-        );
-  
-  checkUpdates();
-  
-  fireSend = 1;
+    snprintf(inSwitch0Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 0);
+    Serial.println(inSwitch0Topic);
+    
+    snprintf(inSwitch1Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 1);
+    Serial.println(inSwitch1Topic);
+    
+    snprintf(outSwitch0Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 0);
+    Serial.println(outSwitch0Topic);
+    
+    snprintf(outSwitch1Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 1);
+    Serial.println(outSwitch1Topic);
+    
+    setupPins();
+    reconnect();
+    
 }
 
 
 void loop()
 {
 
-  unsigned long ctime;
-
+  client.loop();
 
   if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
+    Serial.println("\n\n\rDISCONNECTED!");
     reconnect();
+  }
+  
+  if (fireDiscovery) {
+    sendDiscovery();
+    fireDiscovery = 0;
+  }
+  
+  if (fireSendRelay) {
+    sendRelaysStatus();
+    fireSendRelay = 0;
   }
 
   if (fireSend) {
     sendHumTemp();
     fireSend = 0;
   }
-
-  if (fireDiscovery) {
-    sendDiscovery();
-    fireDiscovery = 0;
-  }
-
+  
   if (readTime) {
-    ctime = getTime();
-    printTime(ctime);
+    my_ctime = getTime();
+    printTime(my_ctime);
     readTime = 0;
   }
 

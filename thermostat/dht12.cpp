@@ -101,7 +101,7 @@ void getTempHum(uint8_t * temp,
 {
   int chk = DHT12.read(DHT12PIN);
 
-  Serial.print("Read sensor: ");
+  Serial.print("\n\rRead sensor: ");
   switch (chk)
   {
     case DHTLIB_OK: 
