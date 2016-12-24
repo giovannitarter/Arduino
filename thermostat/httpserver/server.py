@@ -1,10 +1,17 @@
 #!/usr/bin/python2
-from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
-from os import curdir, sep
-import md5
+
 import os
+from os import curdir, sep
 
 import subprocess as sb
+
+from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
+from SocketServer import ThreadingMixIn
+import threading
+
+import md5
+
+
 
 PORT_NUMBER = 8000
 
@@ -70,16 +77,19 @@ class myHandler(BaseHTTPRequestHandler):
         return
 
 
-#MAIN
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
 
+
+#MAIN
 if __name__ == "__main__":
 
     sb.Popen(["avahi-publish -s \"EspUpdater $(hostname)\" _esp._tcp 8000 \"AAAA\""], shell=True)
     try:
     	#Create a web server and define the handler to manage the
         #incoming request
-        server = HTTPServer(('', PORT_NUMBER), myHandler)
-        print 'Started httpserver on port ' , PORT_NUMBER
+        server = ThreadedHTTPServer(('', PORT_NUMBER), myHandler)
+        print('Started httpserver on port {} '.format(PORT_NUMBER))
     
         #Wait forever for incoming htto requests
         server.serve_forever()
