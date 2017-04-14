@@ -1,6 +1,6 @@
 //
-// FILE: dht12.cpp
-// PURPOSE: DHT12 Temperature & Humidity Sensor library for Arduino
+// FILE: dht.cpp
+// PURPOSE: DHT Temperature & Humidity Sensor library for Arduino
 // LICENSE: GPL v3 (http://www.gnu.org/licenses/gpl.html)
 //
 // DATASHEET: http://www.micro4you.com/files/sensor/DHT11.pdf
@@ -18,16 +18,15 @@
 // + added error codes
 //
 
-#include "dht12.h"
-#include "configuration.h"
+#include "dht.h"
 
-dht12 DHT12;
+dht DHT;
 
 // Return values:
 // DHTLIB_OK
 // DHTLIB_ERROR_CHECKSUM
 // DHTLIB_ERROR_TIMEOUT
-int dht12::read(int pin)
+int dht::read(int pin)
 {
 	// BUFFER TO RECEIVE
 	uint8_t bits[5];
@@ -35,6 +34,8 @@ int dht12::read(int pin)
 	uint8_t idx = 0;
 
   uint8_t sum;
+
+  uint16_t tmp;
 
 	// EMPTY BUFFER
 	for (int i=0; i< 5; i++) bits[i] = 0;
@@ -78,12 +79,27 @@ int dht12::read(int pin)
 		else cnt--;
 	}
 
-	// WRITE TO RIGHT VARS
-        // as bits[1] and bits[3] are allways zero they are omitted in formulas.
+ 
+#ifdef DHT_12
 	hum = bits[0];
   hum_dec = bits[1]; 
 	temp = bits[2];
 	temp_dec = bits[3]; 
+
+#else
+  tmp = bits[0];
+  tmp = tmp << 8;
+  tmp += bits[1];
+  hum = tmp / 10;
+  hum_dec = tmp % 10;
+
+  tmp = bits[2];
+  tmp = tmp << 8;
+  tmp += bits[3];
+  temp = tmp / 10;
+  temp_dec = tmp % 10;
+#endif
+
 
 	sum = bits[0] + bits[1] + bits[2] + bits[3];  
 
@@ -97,9 +113,10 @@ int dht12::read(int pin)
 void getTempHum(uint8_t * temp,
                 uint8_t * temp_dec,
                 uint8_t * hum,
-                uint8_t * hum_dec) 
+                uint8_t * hum_dec,
+                char dhtpin)
 {
-  int chk = DHT12.read(DHT12PIN);
+  int chk = DHT.read(dhtpin);
 
   Serial.print("\n\rRead sensor: ");
   switch (chk)
@@ -118,9 +135,9 @@ void getTempHum(uint8_t * temp,
     break;
   }
 
-  *temp = DHT12.temp;
-  *temp_dec = DHT12.temp_dec;
-  *hum = DHT12.hum;
-  *hum_dec = DHT12.hum_dec;
+  *temp = DHT.temp;
+  *temp_dec = DHT.temp_dec;
+  *hum = DHT.hum;
+  *hum_dec = DHT.hum_dec;
 }
 

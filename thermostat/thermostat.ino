@@ -11,7 +11,7 @@
 #include "wireless.h"
 #include "ntp.h"
 #include "pinio.h"
-#include "dht12.h"
+#include "dht.h"
 #include "otaupdates.h"
 
 #define MAX_PAYLOAD 4
@@ -259,7 +259,8 @@ void reconnect () {
                     mqttAddr, &mqttPort
                     );
    
-    client.setServer(mqttAddr, mqttPort);
+    //client.setServer(mqttAddr, mqttPort);
+    client.setServer(MQTT_SERVER, MQTT_PORT);
 
     if (client.connected() == 0) {
         
@@ -308,7 +309,7 @@ void sendDiscovery() {
 void sendHumTemp() {
 
   uint8_t temp, temp_dec, hum, hum_dec;
-  getTempHum(&temp, &temp_dec, &hum, &hum_dec);
+  getTempHum(&temp, &temp_dec, &hum, &hum_dec, DHTPIN);
 
   char tmp[5];
 
