@@ -16,6 +16,7 @@ void setupWifi() {
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
 
   while (getWifiStatus() != WL_CONNECTED) {

@@ -19,7 +19,12 @@
 #define SWITCH_OFF "OFF"
  
 #include <ESP8266mDNS.h>
+#include <ESP8266WebServer.h>
 
+#include "FS.h"
+#include <ArduinoJson.h>
+
+thermoCfg tcfg;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -39,13 +44,6 @@ uint8_t readTime;
 uint8_t fireDiscovery;
 uint8_t fireSendRelay;
 
-
-char temp_hostname[] = "%s";
-char temp_outTempTopic[] = "devices/%s/temperature";
-char temp_outHumTopic[] = "devices/%s/humidity";
-char temp_outSwitchTopic[] = "devices/%s/switch%d/state";
-char temp_inSwitchTopic[] = "devices/%s/switch%d/cmd";
-
 char espHostname[MAX_TOPIC];
 char outTempTopic[MAX_TOPIC];
 char outHumTopic[MAX_TOPIC];
@@ -63,14 +61,157 @@ int value = 0;
 
 uint8_t myMac[6];
 char macStr[13];
+
+DHT dht = DHT(DHTPIN, SENS_DHT12);
   
 unsigned long my_ctime;
 
+    
+ESP8266WebServer server(80);
+char httpCfgEn;
+ 
+void handleRoot() {
+	
+    char temp[400];
+	int sec = millis() / 1000;
+	int min = sec / 60;
+	int hr = min / 60;
+
+	snprintf ( temp, 400,
+
+"<html>\
+  <head>\
+    <meta http-equiv='refresh' content='5'/>\
+    <title>ESP8THERMO CONFIG PAGE</title>\
+    <style>\
+      body { background-color: #cccccc; font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }\
+    </style>\
+  </head>\
+  <body>\
+  <textarea name=\"Text1\" cols=\"40\" rows=\"5\"></textarea>  \
+  </body>\
+</html>"
+	);
+	server.send ( 200, "text/html", temp );
+}
+
+
+void httpConfig() {
+
+    IPAddress local_IP(192,168,4,22);
+    IPAddress gateway(192,168,4,9);
+    IPAddress subnet(255,255,255,0);
+    
+    Serial.println("HTTP CONFIG");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("AAAAAAAA");
+    WiFi.softAPConfig(local_IP, gateway, subnet);
+
+    server.on ("/", handleRoot); 
+    server.begin();
+}
+
+
+void setup()
+{
+    int i;
+    char * ptr;
+   
+    delay(2000);
+ 
+    fireSend = 0;
+    readTime = 0;
+    fireDiscovery = 0;
+    fireSendRelay = 0;
+  
+    Serial.begin(115200);
+    Serial.println();
+    Serial.println();
+    Serial.println("\n\n\n\rBOOT");
+  
+    Serial.print("MAC: ");
+    getMac(myMac);
+    macToString(myMac, macStr);
+    Serial.println(macStr);
+    
+    loadConfig(); 
+    dht.type = tcfg.sensType;
+    
+    setupPins();
+
+    /*
+    char btnStatus;
+    while (1) {
+        btnStatus = getPinState(BT2);
+        if (btnStatus) {
+            Serial.println("BT2 ON");
+        }
+        else {
+            Serial.println("BT2 OFF");
+        
+        }
+        delay(200); 
+    }
+    */
+
+    if (getPinState(BT2) == 0) {
+        httpCfgEn = 1; 
+        httpConfig();
+        return;
+    };
+
+    client.setCallback(callback);
+    initTopics();    
+    reconnect();
+    
+}
+
+
+void loop()
+{
+
+  if (httpCfgEn) {
+    server.handleClient();
+    return;
+  }
+
+  client.loop();
+
+  if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
+    Serial.println("\n\n\rDISCONNECTED!");
+    reconnect();
+  }
+  
+  if (fireDiscovery) {
+    sendDiscovery();
+    fireDiscovery = 0;
+  }
+  
+  if (fireSendRelay) {
+    sendRelaysStatus();
+    fireSendRelay = 0;
+  }
+
+  if (fireSend) {
+    sendHumTemp();
+    fireSend = 0;
+  }
+  
+  if (readTime) {
+    my_ctime = getTime();
+    printTime(my_ctime);
+    readTime = 0;
+  }
+
+  client.loop();
+}
+
 
 void setupPins() {
-  pinOut(STATUS_LED);
-  pinOut(RELAY0);
-  pinOut(RELAY1);
+    pinOut(STATUS_LED);
+    pinOut(RELAY0);
+    pinOut(RELAY1);
+    pinIn(BT2);
 }
 
 
@@ -253,19 +394,19 @@ void reconnect () {
     
     checkUpdates();
      
-    Serial.println("\n\rTrying to resolve MQTT addr"); 
-    resolveZeroConf(MQTT_SERVICE, MQTT_PROTO,
-                    MQTT_SERVER, MQTT_PORT,
-                    mqttAddr, &mqttPort
-                    );
+    //Serial.println("\n\rTrying to resolve MQTT addr"); 
+    //resolveZeroConf(MQTT_SERVICE, MQTT_PROTO,
+    //                MQTT_SERVER, MQTT_PORT,
+    //                mqttAddr, &mqttPort
+    //                );
    
     //client.setServer(mqttAddr, mqttPort);
-    client.setServer(MQTT_SERVER, MQTT_PORT);
+    client.setServer(tcfg.server, tcfg.port);
 
     if (client.connected() == 0) {
         
         Serial.println("Reconnecting MQTT");
-        client.connect(espHostname);
+        client.connect(tcfg.name);
         if (client.connected()) {
             
             client.subscribe(inSwitch0Topic);
@@ -301,7 +442,7 @@ void reconnect () {
 void sendDiscovery() {
     Serial.println("Sending discovery");
     if (client.connected()) {
-        client.publish(discoveryTopic, espHostname, false);
+        client.publish(discoveryTopic, tcfg.name, false);
     }
 }
 
@@ -309,7 +450,12 @@ void sendDiscovery() {
 void sendHumTemp() {
 
   uint8_t temp, temp_dec, hum, hum_dec;
-  getTempHum(&temp, &temp_dec, &hum, &hum_dec, DHTPIN);
+  
+  dht.read_dht();
+  temp = dht.temp;
+  temp_dec = dht.temp_dec;
+  hum = dht.hum;
+  hum_dec = dht.hum_dec;
 
   char tmp[5];
 
@@ -327,7 +473,7 @@ void sendHumTemp() {
 
 void setupMDNS() {
 
-    if (MDNS.begin(espHostname)) {
+    if (MDNS.begin(tcfg.name)) {
   	    Serial.println("mDNS responder started");
   	}
     else {
@@ -376,87 +522,84 @@ void resolveZeroConf(
 }
 
 
-void setup()
-{
-    int i;
-    char * ptr;
+void loadConfig() {
+
+  int i;
+  StaticJsonBuffer<200> jsonBuffer;
+
+  if (SPIFFS.begin()) {
+
+    //SPIFFS.format();
+
+    Serial.println("SPIFFS started");
+    File f = SPIFFS.open("/config.json", "r+");
     
-    fireSend = 0;
-    readTime = 0;
-    fireDiscovery = 0;
-    fireSendRelay = 0;
-  
-    Serial.begin(115200);
-    Serial.println();
-    Serial.println();
-    Serial.println("\n\n\n\rBOOT");
-  
-    client.setCallback(callback);
-  
-    Serial.print("MAC: ");
-    getMac(myMac);
-    macToString(myMac, macStr);
-    Serial.println(macStr);
+    if (f) {
+        Serial.println("config.json exist");
+        JsonObject& myconfig = jsonBuffer.parseObject(f);
+        myconfig.printTo(Serial);
+        
+        strcpy(tcfg.name, myconfig["NAME"]);
+        
+        strcpy(tcfg.server, myconfig["SRV"]);
+        
+        strcpy(tcfg.essid, myconfig["ESSID"]);
+        strcpy(tcfg.pass, myconfig["PASS"]);
+        
+        tcfg.port = myconfig["SRVP"];
+        tcfg.sensType = myconfig["SENS"];
+    }
+    else {
+        Serial.println("config.json open fail");
+        f = SPIFFS.open("/config.json", "w");
+        Serial.println("config.json open");
+        
+        JsonObject& cfg = jsonBuffer.createObject();
+        cfg["NAME"] = "THERMO1";
+        cfg["ESSID"] = WIFI_SSID;
+        cfg["PASS"] = WIFI_PASS;
+        cfg["SRV"] = MQTT_SERVER;
+        cfg["SRVP"] = MQTT_PORT;
+        cfg["SENS"] = SENS_DHT12;
+        
+        cfg.printTo(f);
+    
+    }
+    f.close();
+
+    }
+    else {
+        Serial.println("SPIFFS begin fail!");
+    }
+}
+
+
+void initTopics() {
+    
   
     Serial.print("HOSTANAME: ");
-    snprintf(espHostname, MAX_TOPIC, temp_hostname, macStr);
-    Serial.println(espHostname);
+    snprintf(tcfg.name, MAX_TOPIC, temp_hostname, tcfg.name);
+    Serial.println(tcfg.name);
   
     Serial.println("Topics:");
-    snprintf(outTempTopic, MAX_TOPIC, temp_outTempTopic, macStr);
+    snprintf(outTempTopic, MAX_TOPIC, temp_outTempTopic, tcfg.name);
     Serial.println(outTempTopic);
     
-    snprintf(outHumTopic, MAX_TOPIC, temp_outHumTopic, macStr);
+    snprintf(outHumTopic, MAX_TOPIC, temp_outHumTopic, tcfg.name);
     Serial.println(outHumTopic);
     
-    snprintf(inSwitch0Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 0);
+    snprintf(inSwitch0Topic, MAX_TOPIC, temp_inSwitchTopic, tcfg.name, 0);
     Serial.println(inSwitch0Topic);
     
-    snprintf(inSwitch1Topic, MAX_TOPIC, temp_inSwitchTopic, macStr, 1);
+    snprintf(inSwitch1Topic, MAX_TOPIC, temp_inSwitchTopic, tcfg.name, 1);
     Serial.println(inSwitch1Topic);
     
-    snprintf(outSwitch0Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 0);
+    snprintf(outSwitch0Topic, MAX_TOPIC, temp_outSwitchTopic, tcfg.name, 0);
     Serial.println(outSwitch0Topic);
     
-    snprintf(outSwitch1Topic, MAX_TOPIC, temp_outSwitchTopic, macStr, 1);
+    snprintf(outSwitch1Topic, MAX_TOPIC, temp_outSwitchTopic, tcfg.name, 1);
     Serial.println(outSwitch1Topic);
-    
-    setupPins();
-    reconnect();
-    
+
 }
 
 
-void loop()
-{
-
-  client.loop();
-
-  if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
-    Serial.println("\n\n\rDISCONNECTED!");
-    reconnect();
-  }
-  
-  if (fireDiscovery) {
-    sendDiscovery();
-    fireDiscovery = 0;
-  }
-  
-  if (fireSendRelay) {
-    sendRelaysStatus();
-    fireSendRelay = 0;
-  }
-
-  if (fireSend) {
-    sendHumTemp();
-    fireSend = 0;
-  }
-  
-  if (readTime) {
-    my_ctime = getTime();
-    printTime(my_ctime);
-    readTime = 0;
-  }
-
-  client.loop();
-}

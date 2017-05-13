@@ -13,7 +13,11 @@ CPP_EXTRA += -DFW_VERSION=\"$(FW_VERSION)\"
 #CPP_EXTRA += -DMDNS_DEBUG_TX
 BUILD_DIR = $(HOME)/Arduino/thermostat/out
 
+#LIBS += "$(HOME)/Arduino/libraries/ArduinoJson"
+
 include makeEspArduino.mk
+
+#LIBS += "$(HOME)/Arduino/libraries/ArduinoJson/third-party/gtest-1.7.0/include/"
 
 .DEFAULT_GOAL := deploy
 VERSION_FILE=.version
@@ -40,5 +44,7 @@ deploy:
 		echo "NOT RECOMPILED"; \
 	fi;
 
+check:
+	echo $(LIBS)
 
 .PHONY=monitor edit

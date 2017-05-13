@@ -29,6 +29,7 @@
 //in msec
 #define NTP_TIMEOUT 5000 
 
+#define BT2 2
 #define RELAY0 12
 #define RELAY1 13
 #define STATUS_LED 16
@@ -37,7 +38,12 @@
 
 #define MAX_TOPIC 40
 
-#define SEND_DATA_PERIOD 5
+#define SEND_DATA_PERIOD 30
 
+#define temp_hostname "%s"
+#define temp_outTempTopic "devices/%s/temperature"
+#define temp_outHumTopic "devices/%s/humidity"
+#define temp_outSwitchTopic "devices/%s/switch%d/state"
+#define temp_inSwitchTopic "devices/%s/switch%d/cmd"
 
 #endif
