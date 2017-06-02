@@ -4,7 +4,13 @@
 void setupMDNS();
 void discoverMqttServer();
 void sendDiscovery();
-void loadConfig();
+
+void initConfig();
+bool loadConfig();
+void writeConfig();
+void factoryConfig();
+
+
 void initTopics();
 void setupPins();
 void reconnect();

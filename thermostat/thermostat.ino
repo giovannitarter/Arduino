@@ -62,7 +62,7 @@ int value = 0;
 uint8_t myMac[6];
 char macStr[13];
 
-DHT dht = DHT(DHTPIN, SENS_DHT12);
+DHT dht = DHT(DHTPIN, SENS_DHT22);
   
 unsigned long my_ctime;
 
@@ -134,7 +134,7 @@ void setup()
     macToString(myMac, macStr);
     Serial.println(macStr);
     
-    loadConfig(); 
+    initConfig(); 
     dht.type = tcfg.sensType;
     
     setupPins();
@@ -354,6 +354,7 @@ void checkUpdates() {
         otaPort
         );
     checkOTA(otaAddr, otaPort);
+    Serial.printf("\n\n\n\r\n");
 } 
 
 
@@ -402,6 +403,9 @@ void reconnect () {
    
     //client.setServer(mqttAddr, mqttPort);
     client.setServer(tcfg.server, tcfg.port);
+    
+    Serial.println("MQTT SERVER:\n");
+    Serial.println(tcfg.server);
 
     if (client.connected() == 0) {
         
@@ -522,16 +526,43 @@ void resolveZeroConf(
 }
 
 
-void loadConfig() {
+void factoryConfig () {
 
-  int i;
-  StaticJsonBuffer<200> jsonBuffer;
+        char newname[20];
+        snprintf(newname, 20, "THERMO_%s", macStr + 9);
+        strcpy(tcfg.name, newname); 
+        strcpy(tcfg.essid, WIFI_SSID);
+        strcpy(tcfg.pass, WIFI_PASS);
+        strcpy(tcfg.server, MQTT_SERVER);
+        tcfg.port = MQTT_PORT;
+        tcfg.sensType = SENS_DHT22;
+}
 
-  if (SPIFFS.begin()) {
 
-    //SPIFFS.format();
+void writeConfig() {
+     
+        File f;   
+        StaticJsonBuffer<200> jsonBuffer;
+        JsonObject& cfg = jsonBuffer.createObject();
 
-    Serial.println("SPIFFS started");
+        cfg["NAME"] = tcfg.name;
+        cfg["ESSID"] = tcfg.essid;
+        cfg["PASS"] = tcfg.pass;
+        cfg["SRV"] = tcfg.server;
+        cfg["SRVP"] = tcfg.port;
+        cfg["SENS"] = tcfg.sensType;
+        
+        f = SPIFFS.open("/config.json", "w");
+        Serial.println("config.json open");
+        cfg.printTo(f);
+        f.close();
+
+}
+
+
+bool loadConfig() {
+    
+    StaticJsonBuffer<200> jsonBuffer;
     File f = SPIFFS.open("/config.json", "r+");
     
     if (f) {
@@ -539,36 +570,87 @@ void loadConfig() {
         JsonObject& myconfig = jsonBuffer.parseObject(f);
         myconfig.printTo(Serial);
         
-        strcpy(tcfg.name, myconfig["NAME"]);
+        if (myconfig["NAME"]) {
+            strcpy(tcfg.name, myconfig["NAME"]);
+            if (strlen(tcfg.name) == 0) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
         
-        strcpy(tcfg.server, myconfig["SRV"]);
+        if (myconfig["SRV"]) {
+            strcpy(tcfg.server, myconfig["SRV"]);
+            if (strlen(tcfg.server) == 0) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
         
-        strcpy(tcfg.essid, myconfig["ESSID"]);
-        strcpy(tcfg.pass, myconfig["PASS"]);
+        if (myconfig["ESSID"]) {
+            strcpy(tcfg.essid, myconfig["ESSID"]);
+            if (strlen(tcfg.essid) == 0) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
         
-        tcfg.port = myconfig["SRVP"];
-        tcfg.sensType = myconfig["SENS"];
-    }
-    else {
-        Serial.println("config.json open fail");
-        f = SPIFFS.open("/config.json", "w");
-        Serial.println("config.json open");
+        if (myconfig["PASS"]) {
+            strcpy(tcfg.pass, myconfig["PASS"]);
+            if (strlen(tcfg.pass) == 0) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
         
-        JsonObject& cfg = jsonBuffer.createObject();
-        cfg["NAME"] = "THERMO1";
-        cfg["ESSID"] = WIFI_SSID;
-        cfg["PASS"] = WIFI_PASS;
-        cfg["SRV"] = MQTT_SERVER;
-        cfg["SRVP"] = MQTT_PORT;
-        cfg["SENS"] = SENS_DHT12;
+        if (myconfig["SRVP"]) {
+            tcfg.port = myconfig["SRVP"];
+            if (tcfg.port == 0) { 
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
         
-        cfg.printTo(f);
+        if (myconfig["SENS"]) {
+            tcfg.sensType = myconfig["SENS"];
+        }
+        else {
+            return false;
+        }
     
+        f.close();
     }
-    f.close();
-
-    }
+    
     else {
+        return false;
+    }
+
+    return true;
+}
+
+
+void initConfig() {
+
+    if (SPIFFS.begin()) {
+        Serial.println("SPIFFS begin ok!");
+        
+        if (loadConfig() == false) {
+            Serial.println("loadconfig fail");
+            factoryConfig();
+            writeConfig();
+        }
+    }
+    else 
+    {
         Serial.println("SPIFFS begin fail!");
     }
 }

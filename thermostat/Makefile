@@ -23,7 +23,7 @@ include makeEspArduino.mk
 VERSION_FILE=.version
 
 edit: 
-	gvim *.cpp *.h *.ino
+	gvim *.ino *.cpp *.h
 
 monitor:
 	picocom -e b $(UPLOAD_PORT) -b 115200
