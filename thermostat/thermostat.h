@@ -43,6 +43,8 @@ struct thermoCfg {
     uint16_t port;
 
     uint16_t sensType;
+    
+    char note[MAX_ADDR];
 };
 
 

@@ -454,24 +454,51 @@ void sendDiscovery() {
 void sendHumTemp() {
 
   uint8_t temp, temp_dec, hum, hum_dec;
+  char tmp[50];
   
   dht.read_dht();
   temp = dht.temp;
   temp_dec = dht.temp_dec;
   hum = dht.hum;
   hum_dec = dht.hum_dec;
+    
 
-  char tmp[5];
+  if (temp < 3 
+      || temp > 80 
+      || temp_dec < 0
+      || temp_dec > 100
+      || hum < 1
+      || hum > 100
+      || hum_dec < 0
+      || hum_dec > 99
+         ) 
+  {
+    snprintf(tmp, 
+        50, 
+        "TH read wrong: %d.%d t %d.%d h",
+        temp,
+        temp_dec,
+        hum,
+        hum_dec
+    );
+    Serial.println(tmp);
+    Serial.println("toggle sens type");
+    
+    dht.toggle_type();
+    tcfg.sensType = dht.type;
+    writeConfig();
+  }
+  else {
+    snprintf(tmp, 50, "%d.%d", temp, temp_dec);
+    client.publish(outTempTopic, tmp);
+    Serial.println(tmp);
 
-  snprintf(tmp, 5, "%d.%d", temp, temp_dec);
-  client.publish(outTempTopic, tmp);
-  Serial.println(tmp);
-
-  snprintf(tmp, 5, "%d.%d", hum, hum_dec);
-  client.publish(outHumTopic, tmp);
-  Serial.println(tmp);
-            
-  sendRelaysStatus();
+    snprintf(tmp, 50, "%d.%d", hum, hum_dec);
+    client.publish(outHumTopic, tmp);
+    Serial.println(tmp);  
+  }     
+   
+    sendRelaysStatus();
 }
 
 
@@ -529,6 +556,9 @@ void resolveZeroConf(
 void factoryConfig () {
 
         char newname[20];
+        
+        Serial.println("Factory config");
+
         snprintf(newname, 20, "THERMO_%s", macStr + 9);
         strcpy(tcfg.name, newname); 
         strcpy(tcfg.essid, WIFI_SSID);
@@ -536,13 +566,14 @@ void factoryConfig () {
         strcpy(tcfg.server, MQTT_SERVER);
         tcfg.port = MQTT_PORT;
         tcfg.sensType = SENS_DHT22;
+        strcpy(tcfg.note, "a");
 }
 
 
 void writeConfig() {
      
         File f;   
-        StaticJsonBuffer<200> jsonBuffer;
+        StaticJsonBuffer<250> jsonBuffer;
         JsonObject& cfg = jsonBuffer.createObject();
 
         cfg["NAME"] = tcfg.name;
@@ -551,10 +582,15 @@ void writeConfig() {
         cfg["SRV"] = tcfg.server;
         cfg["SRVP"] = tcfg.port;
         cfg["SENS"] = tcfg.sensType;
+        cfg["NOTE"] = tcfg.note;
         
         f = SPIFFS.open("/config.json", "w");
         Serial.println("config.json open");
         cfg.printTo(f);
+        f.close();
+        
+        f = SPIFFS.open("/config.json", "r");
+        Serial.println(f);
         f.close();
 
 }
@@ -562,68 +598,95 @@ void writeConfig() {
 
 bool loadConfig() {
     
-    StaticJsonBuffer<200> jsonBuffer;
+    StaticJsonBuffer<250> jsonBuffer;
     File f = SPIFFS.open("/config.json", "r+");
     
     if (f) {
         Serial.println("config.json exist");
-        JsonObject& myconfig = jsonBuffer.parseObject(f);
-        myconfig.printTo(Serial);
+        Serial.println(f);
         
-        if (myconfig["NAME"]) {
+        JsonObject& myconfig = jsonBuffer.parseObject(f);
+        
+        if (myconfig.success() == false) {
+            Serial.println("JSON parsing failed");
+            return false;
+        }
+        
+        myconfig.printTo(Serial);
+        Serial.print("\r\n");
+      
+        if (myconfig.containsKey("NAME")) {
             strcpy(tcfg.name, myconfig["NAME"]);
             if (strlen(tcfg.name) == 0) {
+                Serial.println("NAME1");
                 return false;
             }
         }
         else {
+            Serial.println("NAME2");
             return false;
         }
         
-        if (myconfig["SRV"]) {
+        if (myconfig.containsKey("SRV")) {
             strcpy(tcfg.server, myconfig["SRV"]);
             if (strlen(tcfg.server) == 0) {
+                Serial.println("SRV1");
                 return false;
             }
         }
         else {
+            Serial.println("SRV2");
             return false;
         }
         
-        if (myconfig["ESSID"]) {
+        if (myconfig.containsKey("ESSID")) {
             strcpy(tcfg.essid, myconfig["ESSID"]);
             if (strlen(tcfg.essid) == 0) {
+                Serial.println("ESSID1");
                 return false;
             }
         }
         else {
+            Serial.println("ESSID2");
             return false;
         }
         
-        if (myconfig["PASS"]) {
+        if (myconfig.containsKey("PASS")) {
             strcpy(tcfg.pass, myconfig["PASS"]);
             if (strlen(tcfg.pass) == 0) {
+                Serial.println("PASS1");
                 return false;
             }
         }
         else {
+            Serial.println("PASS2");
             return false;
         }
         
-        if (myconfig["SRVP"]) {
+        if (myconfig.containsKey("SRVP")) {
             tcfg.port = myconfig["SRVP"];
             if (tcfg.port == 0) { 
                 return false;
             }
         }
         else {
+            Serial.println("SRVP");
             return false;
         }
         
-        if (myconfig["SENS"]) {
+        if (myconfig.containsKey("SENS")) {
             tcfg.sensType = myconfig["SENS"];
         }
         else {
+            Serial.println("SENS");
+            return false;
+        }
+        
+        if (myconfig.containsKey("NOTE")) {
+            strcpy(tcfg.note, myconfig["NOTE"]);
+        }
+        else {
+            Serial.println("NOTE2");
             return false;
         }
     
@@ -639,6 +702,8 @@ bool loadConfig() {
 
 
 void initConfig() {
+    
+    Serial.println("INIT START");
 
     if (SPIFFS.begin()) {
         Serial.println("SPIFFS begin ok!");
@@ -653,6 +718,7 @@ void initConfig() {
     {
         Serial.println("SPIFFS begin fail!");
     }
+    Serial.println("INIT DONE\n");
 }
 
 

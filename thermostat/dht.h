@@ -48,6 +48,7 @@ class DHT
 
         DHT(char pin, char type);
         char read_dht();
+        void toggle_type();
         
         char type;
         

@@ -34,6 +34,20 @@ DHT::DHT(char pin_p, char type_p) {
 }
 
 
+void DHT::toggle_type()
+{
+    if (type == SENS_DHT12) {
+        type = SENS_DHT22;
+    }
+    else if (type == SENS_DHT22) {
+        type = SENS_DHT12;
+    }
+    else {
+        type = SENS_DHT12;
+    }
+}
+
+
 // Return values:
 // DHTLIB_OK
 // DHTLIB_ERROR_CHECKSUM
