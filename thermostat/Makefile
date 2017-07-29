@@ -45,7 +45,8 @@ deploy:
 		echo "NOT RECOMPILED"; \
 	fi;
 
-check:
-	echo $(LIBS)
+forcedeploy:
+	make clean
+	make deploy
 
-.PHONY=monitor edit deploy
+.PHONY=

@@ -17,6 +17,8 @@ void reconnect();
 void sendRelaysStatus();
 void sendHumTemp();
 
+void upper(char str[], size_t n);
+
 void callback(
         char * topic, 
         unsigned char * payload, 

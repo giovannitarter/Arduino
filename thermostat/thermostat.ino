@@ -583,15 +583,35 @@ void resolveZeroConf(
 }
 
 
+void upper(char str[], size_t n) {
+    int i = 0;
+    for (i=0; i<n; i++) {
+
+        if (str[i] == 0) {
+            break;
+        }
+
+        if(str[i] >= 'a' && str[i] <= 'z') { 
+            str[i] = str[i] - ('a' - 'A');
+        } 
+
+    } 
+}
+
+
 void factoryConfig () {
 
-        char newname[20];
-        
         Serial.println("Factory config");
+        
+        char newname[20];
+        memset(&newname, 0, 20);
 
         snprintf(newname, 20, "THERMO_%s", macStr + 9);
-        strcpy(tcfg.name, newname); 
+        upper(newname, 20);
         
+        Serial.println(newname);
+        strcpy(tcfg.name, newname); 
+
         strcpy(tcfg.essid, WIFI_SSID);
         strcpy(tcfg.pass, WIFI_PASS);
         
@@ -632,9 +652,9 @@ void writeConfig() {
         cfg.printTo(f);
         f.close();
         
-        f = SPIFFS.open("/config.json", "r");
-        Serial.println(f);
-        f.close();
+        //f = SPIFFS.open("/config.json", "r");
+        //f.printTo(Serial);
+        //f.close();
 
 }
 
@@ -776,6 +796,7 @@ void initConfig() {
         Serial.println("SPIFFS begin ok!");
         
         if (loadConfig() == false) {
+        //if (1) {
             Serial.println("loadconfig fail");
             factoryConfig();
             writeConfig();
