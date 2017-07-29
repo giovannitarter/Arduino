@@ -4,6 +4,7 @@ UPLOAD_PORT = /dev/ttyUSB0
 BOARD = generic
 UPLOAD_SPEED = 115200
 FLASH_MODE = qio
+FLASH_DEF = 4M1M
 #VERBOSE = 1
 
 FW_VERSION ?= "0"
@@ -47,4 +48,4 @@ deploy:
 check:
 	echo $(LIBS)
 
-.PHONY=monitor edit
+.PHONY=monitor edit deploy

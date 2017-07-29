@@ -11,11 +11,12 @@
 //#define MQTT_SERVER "baseone"
 //#define MQTT_SERVER "g3srv"
 
-//#define MQTT_SERVER "192.168.1.3"
+#define MQTT_SERVER "192.168.1.3"
 
-#define MQTT_SERVER "192.168.1.20"
+//#define MQTT_SERVER "192.168.1.20"
 #define MQTT_PORT 1883
 #define NTP_SERVER "ntp.inrim.it"
+//#define NTP_SERVER "ntp"
 
 #define OTA_SERVICE "espupdater"
 #define OTA_PROTO "tcp"

@@ -69,45 +69,77 @@ unsigned long my_ctime;
     
 ESP8266WebServer server(80);
 char httpCfgEn;
+
+#define CONT_SIZE 800
  
 void handleRoot() {
-	
-    char temp[400];
-	int sec = millis() / 1000;
-	int min = sec / 60;
-	int hr = min / 60;
 
-	snprintf ( temp, 400,
+    int i;
+    char temp[CONT_SIZE];
+    char cont[CONT_SIZE];
+    memset(&temp, 0, CONT_SIZE);
+    memset(&cont, 0, CONT_SIZE);
 
-"<html>\
-  <head>\
-    <meta http-equiv='refresh' content='5'/>\
-    <title>ESP8THERMO CONFIG PAGE</title>\
-    <style>\
-      body { background-color: #cccccc; font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }\
-    </style>\
-  </head>\
-  <body>\
-  <textarea name=\"Text1\" cols=\"40\" rows=\"5\"></textarea>  \
-  </body>\
+    File f = SPIFFS.open("/config.json", "r+");
+    f.read((uint8_t *) & cont,CONT_SIZE);
+    f.close();        
+
+	snprintf (temp, CONT_SIZE,
+
+"<html>\n\
+  <head>\n\
+    <title>ESP8THERMO CONFIG PAGE</title>\n\
+  </head>\n\
+  <body>\n\
+ ESP8THERMO CONFIG PAGE\n\
+ <form method=\"POST\" action=\"/\" enctype=\"text/plain\" >\n\
+  <textarea id=\"config\" name=\"config\" rows=\"20\" cols=\"50\">\n%s\n</textarea><br/><br/>\n\
+  <input type=\"submit\" class=\"button\" value=\"Save\">\n\
+  <input type=\"reset\" class=\"button\" value=\"Cancel\">\n\
+ </form>\n\
+  </body>\n\
 </html>"
-	);
-	server.send ( 200, "text/html", temp );
+	,
+    cont
+    );
+
+	server.send (CONT_SIZE, "text/html", temp );
+}
+
+
+void handleRootPost() {
+    
+    String cont;
+    
+    Serial.println("POST");
+    Serial.println(server.arg("config"));
+    Serial.println("ARGS END");
+   
+    cont = server.arg("config");
+
+    File f = SPIFFS.open("/config.json", "w");
+    f.print(cont);
+    f.close();      
+    
+    handleRoot();
 }
 
 
 void httpConfig() {
 
-    IPAddress local_IP(192,168,4,22);
-    IPAddress gateway(192,168,4,9);
+    SPIFFS.begin();
+    
+    IPAddress local_IP(192,168,4,2);
+    IPAddress gateway(192,168,4,1);
     IPAddress subnet(255,255,255,0);
     
     Serial.println("HTTP CONFIG");
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("AAAAAAAA");
+    WiFi.softAP(tcfg.name);
     WiFi.softAPConfig(local_IP, gateway, subnet);
 
-    server.on ("/", handleRoot); 
+    server.on ("/", HTTP_GET, handleRoot);
+    server.on("/", HTTP_POST, handleRootPost);  
     server.begin();
 }
 
@@ -139,23 +171,24 @@ void setup()
     
     setupPins();
 
-    /*
-    char btnStatus;
-    while (1) {
-        btnStatus = getPinState(BT2);
-        if (btnStatus) {
-            Serial.println("BT2 ON");
-        }
-        else {
-            Serial.println("BT2 OFF");
-        
-        }
-        delay(200); 
-    }
-    */
+    int j;
+    uint8_t btnStatus = 0;
 
-    if (getPinState(BT2) == 0) {
-        httpCfgEn = 1; 
+    Serial.println("Press btn2 now to enter config.");
+    for (j=0; j<20; j++) {
+        btnStatus = getPinState(BT2);
+        if (getPinState(BT2) == 0) {
+            httpCfgEn = 1;
+            break; 
+            }
+        delay(200);
+    } 
+    Serial.println("Config window stop.");
+    
+       
+
+    //httpCfgEn = 1;
+    if (httpCfgEn) { 
         httpConfig();
         return;
     };
@@ -378,7 +411,7 @@ void reconnect () {
         Serial.println("Reconnecting Wifi");
     	
         setupWifi();
-        setupMDNS();
+        //setupMDNS();
         setupNtp();
     }
     else {
@@ -527,7 +560,8 @@ void resolveZeroConf(
     String strAddr;
     IPAddress tmpIp;
  
-    resNr = MDNS.queryService(service, proto);
+    //resNr = MDNS.queryService(service, proto);
+    resNr = 0;
     if (resNr > 0) {
 
         strAddr = MDNS.IP(0).toString();
