@@ -3,7 +3,7 @@
 
 #include "wificreds.h"
 
-
+#define JSON_BUFFER_SIZE 400
 #define MAX_ADDR 20
 
 #define MQTT_SERVICE "mqtt"
@@ -20,7 +20,7 @@
 
 #define OTA_SERVICE "espupdater"
 #define OTA_PROTO "tcp"
-#define OTA_ADDRESS MQTT_SERVER
+#define OTA_SERVER MQTT_SERVER
 #define OTA_PORT 8000
 #define OTA_LOCATION "/thermostat.bin"
 

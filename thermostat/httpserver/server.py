@@ -11,7 +11,7 @@ import threading
 
 import md5
 
-
+serverpath = os.path.dirname(os.path.realpath(__file__))
 
 PORT_NUMBER = 8000
 
@@ -29,11 +29,12 @@ class myHandler(BaseHTTPRequestHandler):
             self.send_response(403)
             self.end_headers()
             return
-
+	
         if self.path[0] == "/":
             self.path = self.path[1:]
 
-        filepath = os.path.join(os.getcwd(), self.path)
+        filepath = os.path.join(serverpath, self.path)
+	print(filepath)
         versionpath = filepath + ".version"
         
         if not os.path.exists(filepath) or not os.path.exists(versionpath):
@@ -84,7 +85,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 #MAIN
 if __name__ == "__main__":
 
-    sb.Popen(["avahi-publish -s \"EspUpdater $(hostname)\" _esp._tcp 8000 \"AAAA\""], shell=True)
+    #sb.Popen(["avahi-publish -s \"EspUpdater $(hostname)\" _esp._tcp 8000 \"AAAA\""], shell=True)
     try:
     	#Create a web server and define the handler to manage the
         #incoming request

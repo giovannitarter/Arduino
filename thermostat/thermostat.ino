@@ -29,11 +29,6 @@ thermoCfg tcfg;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-char otaAddr[MAX_ADDR];
-uint16_t otaPort;
-char mqttAddr[MAX_ADDR];
-uint16_t mqttPort;
-
 Ticker statusLedTck;
 Ticker dataReaderTck;
 Ticker getTimeTck;
@@ -383,10 +378,10 @@ void callbackGetTime() {
 void checkUpdates() {
     Serial.printf(
         "Checking updates at %s:%d\n", 
-        otaAddr, 
-        otaPort
+        tcfg.otaserver, 
+        tcfg.otaport
         );
-    checkOTA(otaAddr, otaPort);
+    checkOTA(tcfg.otaserver, tcfg.otaport);
     Serial.printf("\n\n\n\r\n");
 } 
 
@@ -421,8 +416,8 @@ void reconnect () {
     Serial.println("\n\rTrying to resolve OTA updates addr"); 
     resolveZeroConf(
         OTA_SERVICE, OTA_PROTO,
-        OTA_ADDRESS, OTA_PORT,
-        otaAddr, &otaPort
+        OTA_SERVER, OTA_PORT,
+        tcfg.otaserver, &tcfg.otaport
         );
   
     
@@ -437,8 +432,9 @@ void reconnect () {
     //client.setServer(mqttAddr, mqttPort);
     client.setServer(tcfg.server, tcfg.port);
     
-    Serial.println("MQTT SERVER:\n");
+    Serial.println("MQTT SERVER:");
     Serial.println(tcfg.server);
+    Serial.println(tcfg.port);
 
     if (client.connected() == 0) {
         
@@ -595,10 +591,16 @@ void factoryConfig () {
 
         snprintf(newname, 20, "THERMO_%s", macStr + 9);
         strcpy(tcfg.name, newname); 
+        
         strcpy(tcfg.essid, WIFI_SSID);
         strcpy(tcfg.pass, WIFI_PASS);
+        
         strcpy(tcfg.server, MQTT_SERVER);
         tcfg.port = MQTT_PORT;
+        
+        strcpy(tcfg.otaserver, OTA_SERVER);
+        tcfg.otaport = OTA_PORT;
+        
         tcfg.sensType = SENS_DHT22;
         strcpy(tcfg.note, "a");
 }
@@ -607,15 +609,22 @@ void factoryConfig () {
 void writeConfig() {
      
         File f;   
-        StaticJsonBuffer<250> jsonBuffer;
+        StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
         JsonObject& cfg = jsonBuffer.createObject();
 
         cfg["NAME"] = tcfg.name;
+        
         cfg["ESSID"] = tcfg.essid;
         cfg["PASS"] = tcfg.pass;
+        
         cfg["SRV"] = tcfg.server;
         cfg["SRVP"] = tcfg.port;
+        
+        cfg["OTASRV"] = tcfg.otaserver;
+        cfg["OTASRVP"] = tcfg.otaport;
+        
         cfg["SENS"] = tcfg.sensType;
+        
         cfg["NOTE"] = tcfg.note;
         
         f = SPIFFS.open("/config.json", "w");
@@ -632,7 +641,7 @@ void writeConfig() {
 
 bool loadConfig() {
     
-    StaticJsonBuffer<250> jsonBuffer;
+    StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
     File f = SPIFFS.open("/config.json", "r+");
     
     if (f) {
@@ -673,6 +682,41 @@ bool loadConfig() {
             return false;
         }
         
+        if (myconfig.containsKey("SRVP")) {
+            tcfg.port = myconfig["SRVP"];
+            if (tcfg.port == 0) { 
+                return false;
+            }
+        }
+        else {
+            Serial.println("SRVP");
+            return false;
+        }
+        
+        if (myconfig.containsKey("OTASRV")) {
+            strcpy(tcfg.otaserver, myconfig["OTASRV"]);
+            if (strlen(tcfg.otaserver) == 0) {
+                Serial.println("OTASRV1");
+                return false;
+            }
+        }
+        else {
+            Serial.println("OTASRV2");
+            return false;
+        }
+        
+        if (myconfig.containsKey("OTASRVP")) {
+            tcfg.otaport = myconfig["OTASRVP"];
+            if (tcfg.otaport == 0) { 
+                return false;
+            }
+        }
+        else {
+            Serial.println("OTASRVP");
+            return false;
+        }
+        
+        
         if (myconfig.containsKey("ESSID")) {
             strcpy(tcfg.essid, myconfig["ESSID"]);
             if (strlen(tcfg.essid) == 0) {
@@ -694,17 +738,6 @@ bool loadConfig() {
         }
         else {
             Serial.println("PASS2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("SRVP")) {
-            tcfg.port = myconfig["SRVP"];
-            if (tcfg.port == 0) { 
-                return false;
-            }
-        }
-        else {
-            Serial.println("SRVP");
             return false;
         }
         

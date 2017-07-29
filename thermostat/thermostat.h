@@ -41,6 +41,9 @@ struct thermoCfg {
 
     char server[MAX_ADDR];
     uint16_t port;
+    
+    char otaserver[MAX_ADDR];
+    uint16_t otaport;
 
     uint16_t sensType;
     
