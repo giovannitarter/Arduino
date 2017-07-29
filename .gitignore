@@ -5,3 +5,5 @@ out
 *.bin
 *.version
 old
+test
+libraries
