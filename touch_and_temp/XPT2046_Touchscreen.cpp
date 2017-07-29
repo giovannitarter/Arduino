@@ -22,9 +22,9 @@
 
 #include "XPT2046_Touchscreen.h"
 
-#define Z_THRESHOLD     1000
+#define Z_THRESHOLD     400
 #define Z_THRESHOLD_INT	75
-#define MSEC_THRESHOLD  50
+#define MSEC_THRESHOLD  3
 #define SPI_SETTING     SPISettings(2000000, MSBFIRST, SPI_MODE0)
 
 XPT2046_Touchscreen::XPT2046_Touchscreen(uint8_t cs, uint8_t tirq)
