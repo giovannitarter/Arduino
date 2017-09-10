@@ -10,10 +10,10 @@
 #define LATCH_PIN 13 
 
 //Pin connected to D(pin 2) of HEF4094
-#define DATA_PIN 14 
+#define DATA_PIN 12 
 
 //Pin connected to CP(pin 3) of HEF4094
-#define CLK_PIN 12
+#define CLK_PIN 14
 
 
 
@@ -50,5 +50,7 @@ void writeshr(uint8_t character);
 void start();
 void reset();
 
+void loopServer();
+void setupServer();
 
 #endif
