@@ -1,5 +1,5 @@
 *.swp
-wificreds.h
+*/wificreds.h
 out
 .version
 *.bin

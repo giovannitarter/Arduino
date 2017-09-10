@@ -2,12 +2,13 @@
 
 #include <ESP8266WiFi.h>
 #include "parallel_print_server.h"
+#include "wificreds.h"
 
 #define MAX_SRV_CLIENTS 1
 #define PORT 9100
 
-const char* ssid = "GNET";
-const char* password = "aqua@332345678";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASS;
 
 WiFiServer server(PORT);
 WiFiClient serverClients[MAX_SRV_CLIENTS];
