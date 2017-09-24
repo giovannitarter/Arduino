@@ -1,6 +1,7 @@
 // Control pins
 
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
 
 #include "parallel_print_server.h"
 #include "parport.h"
@@ -31,7 +32,17 @@ void setupServer() {
     }
     Serial.println("");
     Serial.println("connected");
-  
+ 
+    if (!MDNS.begin("esp8266")) {
+        Serial.println("Error setting up MDNS responder!");
+        while(1) { 
+            delay(1000);
+        }
+    }
+    Serial.println("mDNS responder started");
+    
+    MDNS.addService("printer", "tcp", 9100); 
+    
     server.begin();
     server.setNoDelay(true);
   
