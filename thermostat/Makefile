@@ -1,10 +1,20 @@
 SKETCH = thermostat.ino
 
+
 UPLOAD_PORT = /dev/ttyUSB0
 BOARD = generic
 UPLOAD_SPEED = 115200
 FLASH_MODE = qio
-FLASH_DEF = 4M1M
+FLASH_DEF = 4M3M
+
+
+#UPLOAD_PORT = /dev/ttyUSB0
+#BOARD = nodemcuv2
+#UPLOAD_SPEED = 460800
+#FLASH_MODE = dio
+#FLASH_DEF = 4M3M
+
+
 #VERBOSE = 1
 
 FW_VERSION ?= "0"
@@ -18,7 +28,7 @@ BUILD_DIR = $(HOME)/Arduino/thermostat/out
 
 include makeEspArduino.mk
 
-#LIBS += "$(HOME)/Arduino/libraries/ArduinoJson/third-party/gtest-1.7.0/include/"
+LIBS += "$(HOME)/Arduino/libraries/ArduinoJson/third-party/"
 
 .DEFAULT_GOAL := deploy
 VERSION_FILE=.version
@@ -27,7 +37,7 @@ edit:
 	gvim *.ino *.cpp *.h
 
 monitor:
-	picocom -e b $(UPLOAD_PORT) -b 115200
+	picocom -e b $(UPLOAD_PORT) -b 115200 --imap lfcrlf
 
 deploy:
 	VERSION=$$(cat $(VERSION_FILE)); \

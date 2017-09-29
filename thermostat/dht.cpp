@@ -74,8 +74,8 @@ char DHT::read_dht()
     uint8_t sum;
     uint16_t tmp;
 	
-    unsigned int loopCnt = 10000;
-	unsigned long t;
+    int16_t loopCnt;
+	unsigned long pmillis, pmicros;
     int i;
 
 	// EMPTY BUFFER
@@ -91,46 +91,54 @@ char DHT::read_dht()
 	delayMicroseconds(40);
 	pinMode(pin, INPUT);
 
-	// ACKNOWLEDGE or TIMEOUT
-	loopCnt = 10000;
-	while(digitalRead(pin) == LOW) {
-        if (loopCnt-- == 0) {
-           res = DHTLIB_ERROR_TIMEOUT;
-        }
-    }
 
-    if (res == DHTLIB_OK) {
-	    loopCnt = 10000;
-	    while(digitalRead(pin) == HIGH) {
-		    if (loopCnt-- == 0) { 
-                res = DHTLIB_ERROR_TIMEOUT;
-            }
+	//Wait that dht pin is low
+    pmillis = millis();
+    while(digitalRead(pin) == LOW) {
+        if (millis() - pmillis > DTH_READ_TIMEOUT) {
+            res = DHTLIB_ERROR_TIMEOUT;
+            break;
         }
+    } 
+    
+	//Wait that dht pin becomes high
+    if (res == DHTLIB_OK) {
+        pmillis = millis();
+        while(digitalRead(pin) == HIGH) {
+            if (millis() - pmillis > DTH_READ_TIMEOUT) {
+                res = DHTLIB_ERROR_TIMEOUT;
+                break;
+            }
+        } 
     }
 
     if (res == DHTLIB_OK) {
 	    // READ OUTPUT - 40 BITS => 5 BYTES or TIMEOUT
 	    for (i=0; i<40; i++)
 	    {
-	    	loopCnt = 10000;
-	    	while(digitalRead(pin) == LOW) {
-	    		if (loopCnt-- == 0) {
-                   res = DHTLIB_ERROR_TIMEOUT;
+            
+            pmillis = millis();
+            while(digitalRead(pin) == LOW) {
+                if (millis() - pmillis > DTH_READ_TIMEOUT) {
+                    res = DHTLIB_ERROR_TIMEOUT;
+                    break;
                 }
-            }
-
-	    	t = micros();
-
-	    	loopCnt = 10000;
-	    	while(digitalRead(pin) == HIGH) {
-	    		if (loopCnt-- == 0) {
-                   res = DHTLIB_ERROR_TIMEOUT;
+            } 
+	
+	    	pmicros = micros();
+            pmillis = millis();
+            while(digitalRead(pin) == HIGH) {
+                if (millis() - pmillis > DTH_READ_TIMEOUT) {
+                    res = DHTLIB_ERROR_TIMEOUT;
+                    break;
                 }
-            }
+            } 
 
-	    	if ((micros() - t) > 40) bits[idx] |= (1 << cnt);
-	    	if (cnt == 0)   // next byte?
-	    	{
+	    	if ((micros() - pmicros) > 40) {
+                bits[idx] |= (1 << cnt);
+            }
+	    	
+            if (cnt == 0) {
 	    		cnt = 7;    // restart at MSB
 	    		idx++;      // next byte!
 	    	}
@@ -143,7 +151,7 @@ char DHT::read_dht()
             res = DHTLIB_ERROR_CHECKSUM;
         }
     }
-    
+   
     if (res == DHTLIB_OK) {
     
         if (type == SENS_DHT12) { 
@@ -168,10 +176,10 @@ char DHT::read_dht()
         else {
             res = DHTLIB_ERROR_CFG;
         }
-    }
-
-    if (hum > 100) {
-        res = DHTLIB_ERROR_VALUE;
+        
+        if (hum > 100) {
+            res = DHTLIB_ERROR_VALUE;
+        }
     }
 
     lastReadTime = millis();

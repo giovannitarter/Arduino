@@ -5,7 +5,7 @@
 # Edit the contents of this file to suit your project
 # or just include it and override the applicable macros.
 #
-# License: GPL 2.1
+# License: LGPL 2.1
 # General and full license information is available at:
 #    https://github.com/plerup/makeEspArduino
 #
@@ -28,7 +28,8 @@ CHIP ?= esp8266
 BOARD ?= $(if $(filter $(CHIP), esp32),esp32,generic)
 
 # Serial flashing parameters
-UPLOAD_PORT ?= $(shell ls -1tr /dev/ttyUSB* | tail -1)
+UPLOAD_PORT ?= $(shell ls -1tr /dev/ttyUSB* 2>/dev/null | tail -1)
+UPLOAD_PORT := $(if $(UPLOAD_PORT),$(UPLOAD_PORT),/dev/ttyS0)
 UPLOAD_VERB ?= -v
 
 # OTA parameters
@@ -43,10 +44,12 @@ HTTP_PWD ?= user
 HTTP_USR ?= password
 
 # Output directory
-BUILD_DIR ?= /tmp/mkESP/$(MAIN_NAME)_$(BOARD)
+BUILD_ROOT ?= /tmp/mkESP
+BUILD_DIR ?= $(BUILD_ROOT)/$(MAIN_NAME)_$(BOARD)
 
 # File system source directory
 FS_DIR ?= $(dir $(SKETCH))data
+FS_REST_DIR ?= $(BUILD_DIR)/file_system
 
 # Bootloader
 BOOT_LOADER ?= $(ESP_ROOT)/bootloaders/eboot/eboot.elf
@@ -62,25 +65,27 @@ git_description = $(shell git -C  $(1) describe --tags --always --dirty 2>/dev/n
 time_string = $(shell date +$(1))
 
 # ESP Arduino directories
+OS ?= $(shell uname -s)
 ifndef ESP_ROOT
   # Location not defined, find and use possible version in the Arduino IDE installation
-  OS ?= $(shell uname -s)
   ifeq ($(OS), Windows_NT)
-    ARDUINO_DIR = $(shell cygpath -m $(LOCALAPPDATA)/Arduino15/packages/$(CHIP))
+    ARDUINO_ROOT = $(shell cygpath -m $(LOCALAPPDATA)/Arduino15)
   else ifeq ($(OS), Darwin)
-    ARDUINO_DIR = $(HOME)/Library/Arduino15/packages/$(CHIP)
+    ARDUINO_ROOT = $(HOME)/Library/Arduino15
   else
-    ARDUINO_DIR = $(HOME)/.arduino15/packages/$(CHIP)
+    ARDUINO_ROOT = $(HOME)/.arduino15
   endif
-  ESP_ROOT := $(lastword $(wildcard $(ARDUINO_DIR)/hardware/$(CHIP)/*))
+  ARDUINO_ESP_ROOT = $(ARDUINO_ROOT)/packages/$(CHIP)
+  ESP_ROOT := $(lastword $(wildcard $(ARDUINO_ESP_ROOT)/hardware/$(CHIP)/*))
   ifeq ($(ESP_ROOT),)
     $(error No installed version of $(CHIP) Arduino found)
   endif
+  ARDUINO_LIBS = $(shell grep -o "sketchbook.path=.*" $(ARDUINO_ROOT)/preferences.txt 2>/dev/null | cut -f2- -d=)/libraries
   ESP_ARDUINO_VERSION := $(notdir $(ESP_ROOT))
   # Find used version of compiler and tools
-  COMP_PATH := $(lastword $(wildcard $(ARDUINO_DIR)/tools/xtensa-lx106-elf-gcc/*))
-  ESPTOOL_PATH := $(lastword $(wildcard $(ARDUINO_DIR)/tools/esptool/*))
-  MKSPIFFS_PATH := $(lastword $(wildcard $(ARDUINO_DIR)/tools/mkspiffs/*))
+  COMP_PATH := $(lastword $(wildcard $(ARDUINO_ESP_ROOT)/tools/xtensa-lx106-elf-gcc/*))
+  ESPTOOL_PATH := $(lastword $(wildcard $(ARDUINO_ESP_ROOT)/tools/esptool/*))
+  MKSPIFFS_PATH := $(lastword $(wildcard $(ARDUINO_ESP_ROOT)/tools/mkspiffs/*))
 else
   # Location defined, assume it is a git clone
   ESP_ARDUINO_VERSION = $(call git_description,$(ESP_ROOT))
@@ -93,7 +98,15 @@ ifeq ($(wildcard $(ESP_ROOT)/cores/$(CHIP)),)
   $(error $(ESP_ROOT) is not a vaild directory for $(CHIP))
 endif
 
-ESPTOOL_PY = esptool.py --baud=$(UPLOAD_SPEED) --port $(UPLOAD_PORT)
+ESPTOOL_PY ?= $(shell which esptool.py)
+ifneq ($(ESPTOOL_PY),)
+  # esptool.py exists, use it for esp8266 flash operations
+  ESPTOOL_PY += --baud=$(UPLOAD_SPEED) --port $(UPLOAD_PORT)
+  ifeq ($(CHIP),esp8266)
+   UPLOAD_COM = $(ESPTOOL_PY) -a soft_reset write_flash 0x00000 $(BUILD_DIR)/$(MAIN_NAME).bin
+   FS_UPLOAD_COM = $(ESPTOOL_PY)  --port $(UPLOAD_PORT) --baud $(UPLOAD_SPEED) -a soft_reset write_flash $(SPIFFS_START) $(FS_IMAGE)
+  endif
+endif
 
 # Search for sketch if not defined
 SKETCH := $(realpath $(firstword \
@@ -134,16 +147,12 @@ CORE_LIB = $(BUILD_DIR)/arduino.ar
 # User defined compilation units and directories
 ifeq ($(LIBS),)
   # Automatically find directories with header files used by the sketch
-  LIBS := $(shell perl -e 'use File::Find;@d = split(" ", shift);while (<>) {$$f{"$$1"} = 1 if /^\s*\#include\s+[<"]([^>"]+)/;}find(sub {print $$File::Find::dir," " if $$f{$$_}}, @d);'  "$(ESP_LIBS) $(HOME)/Arduino/libraries" $(SKETCH))
-  ifeq ($(LIBS),)
-    # No dependencies found
-    LIBS = /dev/null
-  endif
+  LIBS := $(shell perl -e 'use File::Find;@d = split(" ", shift);while (<>) {$$f{"$$1"} = 1 if /^\s*\#include\s+[<"]([^>"]+)/;}find(sub {if ($$f{$$_}){print $$File::Find::dir," ";$$f{$$_}=0;}}, @d);'  "$(ESP_LIBS) $(ARDUINO_LIBS)" $(SKETCH))
 endif
 
 IGNORE_PATTERN := $(foreach dir,$(EXCLUDE_DIRS),$(dir)/%)
 SKETCH_DIR = $(dir $(SKETCH))
-USER_INC := $(filter-out $(IGNORE_PATTERN),$(shell find $(SKETCH_DIR) $(LIBS) -name "*.h"))
+USER_INC := $(filter-out $(IGNORE_PATTERN),$(shell find $(SKETCH_DIR) $(dir $(LIBS)) -name "*.h" -o -name "*.hpp" ))
 USER_SRC := $(SKETCH) $(filter-out $(IGNORE_PATTERN),$(shell find $(SKETCH_DIR) $(LIBS) -name "*.S" -o -name "*.c" -o -name "*.cpp"))
 # Object file suffix seems to be significant for the linker...
 USER_OBJ := $(subst .ino,_.cpp,$(patsubst %,$(BUILD_DIR)/%$(OBJ_EXT),$(notdir $(USER_SRC))))
@@ -157,9 +166,23 @@ FLASH_DEF ?= $(shell cat $(ESP_ROOT)/boards.txt | perl -e 'while (<>) {if (/^$(B
 ARDUINO_MK = $(BUILD_DIR)/arduino.mk
 ARDUINO_DESC := $(shell find $(ESP_ROOT) -maxdepth 1 -name "*.txt" | sort)
 $(ARDUINO_MK): $(ARDUINO_DESC) $(MAKEFILE_LIST) | $(BUILD_DIR)
-	perl -e "$$PARSE_ARDUINO" $(BOARD) $(FLASH_DEF) $(ARDUINO_EXTRA_DESC) $(ARDUINO_DESC) >$(ARDUINO_MK)
+	perl -e "$$PARSE_ARDUINO" $(BOARD) $(FLASH_DEF) \"$(OS)\" $(ARDUINO_EXTRA_DESC) $(ARDUINO_DESC) >$(ARDUINO_MK)
 
 -include $(ARDUINO_MK)
+
+# Handle possible changed state i.e. make command line parameters or changed git versions
+IGNORE_STATE = $(if $(filter $(MAKECMDGOALS), help clean dump_flash restore_flash list_boards),1,)
+ifeq ($(IGNORE_STATE),)
+  STATE_LOG := $(BUILD_DIR)/state.txt
+  STATE_INF := $(strip $(foreach par,$(shell tr "\0" " " </proc/$$PPID/cmdline),$(if $(findstring =,$(par)),$(par),))) \
+               $(PROJ_VERSION) $(ENV_VERSION)
+  PREV_STATE_INF := $(if $(wildcard $(STATE_LOG)),$(shell cat $(STATE_LOG)),$(STATE_INF))
+  ifneq ($(PREV_STATE_INF),$(STATE_INF))
+    $(info * Build state has changed, doing a full rebuild *)
+    MAKEFLAGS += -B
+  endif
+  STATE_SAVE := $(shell mkdir -p $(BUILD_DIR) ; echo -n '$(STATE_INF)' >$(STATE_LOG))
+endif
 
 # Compilation directories and path
 INCLUDE_DIRS += $(CORE_DIR) $(ESP_ROOT)/variants/$(INCLUDE_VARIANT) $(BUILD_DIR)
@@ -207,7 +230,7 @@ $(MAIN_EXE): $(CORE_LIB) $(USER_OBJ)
 	echo 	'#include <buildinfo.h>' >$(BUILD_INFO_CPP)
 	echo '_tBuildInfo _BuildInfo = {"$(BUILD_DATE)","$(BUILD_TIME)","$(SRC_GIT_VERSION)","$(ESP_ARDUINO_VERSION)"};' >>$(BUILD_INFO_CPP)
 	$(CPP_COM) $(BUILD_INFO_CPP) -o $(BUILD_INFO_OBJ)
-	$(LD_COM)
+	$(LD_COM) $(LD_EXTRA)
 	$(GEN_PART_COM)
 	$(ELF2BIN_COM)
 	$(SIZE_COM) | perl -e "$$MEM_USAGE" "$(MEM_FLASH)" "$(MEM_RAM)"
@@ -240,10 +263,18 @@ fs: $(FS_IMAGE)
 upload_fs flash_fs: $(FS_IMAGE)
 	$(FS_UPLOAD_COM)
 
-FLASH_FILE ?= esp_flash.bin
+FLASH_FILE ?= $(BUILD_DIR)/esp_flash.bin
 dump_flash:
 	echo Dumping flash memory to file: $(FLASH_FILE)
 	$(ESPTOOL_PY) read_flash 0 $(shell perl -e 'shift =~ /(\d+)([MK])/ || die "Invalid memory size\n";$$mem_size=$$1*1024;$$mem_size*=1024 if $$2 eq "M";print $$mem_size;' $(FLASH_DEF)) $(FLASH_FILE)
+
+dump_fs:
+	echo Dumping flash file system to directory: $(FS_REST_DIR)
+	-$(ESPTOOL_PY) read_flash $(SPIFFS_START) $(SPIFFS_SIZE) $(FS_IMAGE)
+	mkdir -p $(FS_REST_DIR)
+	echo
+	echo == Files ==
+	$(RESTSPIFFS_COM)
 
 restore_flash:
 	echo Restoring flash memory from file: $(FLASH_FILE)
@@ -281,6 +312,8 @@ help:
 	echo "                         Params: HTTP_ADDR, HTTP_URI, HTTP_PWD and HTTP_USR"
 	echo "  dump_flash           Dump the whole board flash memory to a file"
 	echo "  restore_flash        Restore flash memory from a previously dumped file"
+	echo "  dump_fs              Extract all files from the flash file system"
+	echo "                         Params: FS_DUMP_DIR"
 	echo "  list_lib             Show a list of used library files and include paths"
 	echo "Configurable parameters:"
 	echo "  SKETCH               Main source file"
@@ -340,6 +373,7 @@ endif
 define PARSE_ARDUINO
 my $$board = shift;
 my $$flashSize = shift;
+my $$os = (shift =~ /Windows_NT/) ? "windows" : "linux";
 my %v;
 
 sub def_var {
@@ -367,6 +401,7 @@ foreach my $$fn (@ARGV) {
       $$key =~ s/$$board\.menu\.UploadSpeed\.[^\.]+\.//;
       $$key =~ s/^$$board\.//;
       $$v{$$key} ||= $$val;
+      $$v{$$1} = $$v{$$key} if $$key =~ /(.+)\.$$os$$/;
    }
    close($$f);
 }
@@ -395,7 +430,7 @@ foreach my $$key (sort keys %v) {
       $$v{$$key} =~ s/\{([\w\-\.]+)\}/$$v{$$1}/;
       $$v{$$key} =~ s/""//;
    }
-   $$v{$$key} =~ s/ -o $$//;
+   $$v{$$key} =~ s/ -o\s+$$//;
    $$v{$$key} =~ s/(-D\w+=)"([^"]+)"/$$1\\"$$2\\"/g;
 }
 
@@ -409,12 +444,15 @@ print "LD_COM=$$v{'recipe.c.combine.pattern'}\n";
 print "GEN_PART_COM=$$v{'recipe.objcopy.eep.pattern'}\n";
 print "ELF2BIN_COM=$$v{'recipe.objcopy.hex.pattern'}\n";
 print "SIZE_COM=$$v{'recipe.size.pattern'}\n";
-my $$flash_size = sprintf("0x%X", hex($$v{'build.spiffs_end'})-hex($$v{'build.spiffs_start'}));
-print "MKSPIFFS_COM=$$v{'tools.mkspiffs.path'}/$$v{'tools.mkspiffs.cmd'} -b $$v{'build.spiffs_blocksize'} -s $$flash_size -c \$$(FS_DIR) \$$(FS_IMAGE)\n";
-print "UPLOAD_COM=$$v{'tools.esptool.upload.pattern'}\n";
+my $$spiffs_size = sprintf("0x%X", hex($$v{'build.spiffs_end'})-hex($$v{'build.spiffs_start'}));
+print "MKSPIFFS_COM=$$v{'tools.mkspiffs.path'}/$$v{'tools.mkspiffs.cmd'} -b $$v{'build.spiffs_blocksize'} -s $$spiffs_size -c \$$(FS_DIR) \$$(FS_IMAGE)\n";
+print "RESTSPIFFS_COM=$$v{'tools.mkspiffs.path'}/$$v{'tools.mkspiffs.cmd'} -b $$v{'build.spiffs_blocksize'} -s $$spiffs_size -u \$$(FS_REST_DIR) \$$(FS_IMAGE)\n";
+print "UPLOAD_COM?=$$v{'tools.esptool.upload.pattern'}\n";
+print "SPIFFS_START=$$v{'build.spiffs_start'}\n";
+print "SPIFFS_SIZE=$$spiffs_size\n";
 my $$fs_upload_com = $$v{'tools.esptool.upload.pattern'};
 $$fs_upload_com =~ s/(.+ -ca) .+/$$1 $$v{'build.spiffs_start'} -cf \$$(FS_IMAGE)/;
-print "FS_UPLOAD_COM=$$fs_upload_com\n";
+print "FS_UPLOAD_COM?=$$fs_upload_com\n";
 my $$val = $$v{'recipe.hooks.core.prebuild.1.pattern'};
 $$val =~ s/bash -c "(.+)"/$$1/;
 $$val =~ s/(#define .+0x)(\`)/"\\$$1\"$$2/;

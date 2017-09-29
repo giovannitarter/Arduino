@@ -1,14 +1,20 @@
 #ifndef _CONFIG_H_THERMOSTAT_
 #define _CONFIG_H_THERMOSTAT_
 
+#include "configuration.h"
+
+//#define DEBUG
+
+#ifdef DEBUG
+#  define DEBUG_SERIAL(x) Serial.println({x});
+#else
+#  define DEBUG_SERIAL(x) ;
+#endif
+
+
 void setupMDNS();
 void discoverMqttServer();
 void sendDiscovery();
-
-void initConfig();
-bool loadConfig();
-void writeConfig();
-void factoryConfig();
 
 
 void initTopics();

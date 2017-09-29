@@ -2,7 +2,7 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
 
-#include <PubSubClient.h>
+#include "PubSubClient.h"
 
 #include <Ticker.h>
 
@@ -13,6 +13,7 @@
 #include "pinio.h"
 #include "dht.h"
 #include "otaupdates.h"
+#include "utils.h"
 
 #define MAX_PAYLOAD 4
 #define SWITCH_ON "ON"
@@ -22,7 +23,7 @@
 #include <ESP8266WebServer.h>
 
 #include "FS.h"
-#include <ArduinoJson.h>
+#include "persistent_config.h"
 
 thermoCfg tcfg;
 
@@ -39,13 +40,19 @@ uint8_t readTime;
 uint8_t fireDiscovery;
 uint8_t fireSendRelay;
 
+//Topics
 char espHostname[MAX_TOPIC];
 char outTempTopic[MAX_TOPIC];
 char outHumTopic[MAX_TOPIC];
+
 char outSwitch0Topic[MAX_TOPIC];
 char inSwitch0Topic[MAX_TOPIC];
+char availSwitch0Topic[MAX_TOPIC];
+
 char outSwitch1Topic[MAX_TOPIC];
 char inSwitch1Topic[MAX_TOPIC];
+char availSwitch1Topic[MAX_TOPIC];
+
 
 char discoveryTopic[] = "espdiscovery";
 char resetTopic[] = "espreset";
@@ -139,6 +146,33 @@ void httpConfig() {
 }
 
 
+void factoryConfig (thermoCfg * tcfg) {
+
+        Serial.println("Factory config");
+        
+        char newname[20];
+        memset(&newname, 0, 20);
+
+        snprintf(newname, 20, "THERMO_%s", macStr + 9);
+        upper(newname, 20);
+        
+        Serial.println(newname);
+        strcpy(tcfg->name, newname); 
+
+        strcpy(tcfg->essid, WIFI_SSID);
+        strcpy(tcfg->pass, WIFI_PASS);
+        
+        strcpy(tcfg->server, MQTT_SERVER);
+        tcfg->port = MQTT_PORT;
+        
+        strcpy(tcfg->otaserver, OTA_SERVER);
+        tcfg->otaport = OTA_PORT;
+        
+        tcfg->sensType = SENS_DHT22;
+        strcpy(tcfg->note, "a");
+}
+
+
 void setup()
 {
     int i;
@@ -160,10 +194,11 @@ void setup()
     getMac(myMac);
     macToString(myMac, macStr);
     Serial.println(macStr);
-    
-    initConfig(); 
+ 
+    factoryConfig(&tcfg);
+    setup_config(&tcfg); 
     dht.type = tcfg.sensType;
-    
+ 
     setupPins();
 
     int j;
@@ -275,19 +310,26 @@ void getMDNS(char * service, char * proto) {
 
 void sendRelaysStatus() {
 
-  if (getPinState(RELAY0)) {
-      client.publish(outSwitch0Topic, "ON");  
-  }
-  else {
-    client.publish(outSwitch0Topic, "OFF");
-  }
+    DEBUG_SERIAL("sendRelaysStatus start");
 
-  if (getPinState(RELAY1)) {
-      client.publish(outSwitch1Topic, "ON");  
-  }
-  else {
-    client.publish(outSwitch1Topic, "OFF");
-  }
+    client.publish(availSwitch0Topic, "OFF");  
+    client.publish(availSwitch1Topic, "ON");  
+    
+    if (getPinState(RELAY0)) {
+        client.publish(outSwitch0Topic, "ON");  
+    }
+    else {
+      client.publish(outSwitch0Topic, "OFF");
+    }
+
+    if (getPinState(RELAY1)) {
+        client.publish(outSwitch1Topic, "ON");  
+    }
+    else {
+      client.publish(outSwitch1Topic, "OFF");
+    }
+    
+    DEBUG_SERIAL("sendRelaysStatus end");
 }
 
 
@@ -467,67 +509,80 @@ void reconnect () {
 
     statusLedTck.detach();
     setPin(STATUS_LED);
-    Serial.println("INIT END\n\n\n");
+    Serial.println("INIT END\n");
   //getTimeTck.attach(5, callbackGetTime);
 }
 
 
 void sendDiscovery() {
-    Serial.println("Sending discovery");
+    DEBUG_SERIAL("sendDiscovery start");
     if (client.connected()) {
         client.publish(discoveryTopic, tcfg.name, false);
     }
+    DEBUG_SERIAL("sendDiscovery end");
 }
 
 
 void sendHumTemp() {
 
-  uint8_t temp, temp_dec, hum, hum_dec;
-  char tmp[50];
+    uint8_t temp, temp_dec, hum, hum_dec;
+    char tmp[50], res;
   
-  dht.read_dht();
-  temp = dht.temp;
-  temp_dec = dht.temp_dec;
-  hum = dht.hum;
-  hum_dec = dht.hum_dec;
+    DEBUG_SERIAL("sendHumTemp start");
+  
+    res = dht.read_dht();
     
+    DEBUG_SERIAL("read dht done");
 
-  if (temp < 3 
-      || temp > 80 
-      || temp_dec < 0
-      || temp_dec > 100
-      || hum < 1
-      || hum > 100
-      || hum_dec < 0
-      || hum_dec > 99
-         ) 
-  {
-    snprintf(tmp, 
-        50, 
-        "TH read wrong: %d.%d t %d.%d h",
-        temp,
-        temp_dec,
-        hum,
-        hum_dec
-    );
-    Serial.println(tmp);
-    Serial.println("toggle sens type");
+    temp = dht.temp;
+    temp_dec = dht.temp_dec;
+    hum = dht.hum;
+    hum_dec = dht.hum_dec;
     
-    dht.toggle_type();
-    tcfg.sensType = dht.type;
-    writeConfig();
-  }
-  else {
-    snprintf(tmp, 50, "%d.%d", temp, temp_dec);
-    client.publish(outTempTopic, tmp);
-    Serial.println(tmp);
-
-    snprintf(tmp, 50, "%d.%d", hum, hum_dec);
-    client.publish(outHumTopic, tmp);
-    Serial.println(tmp);  
-  }     
-   
+    if (res == DHTLIB_OK) {
+ 
+        if (
+            temp < 3 
+            || temp > 80 
+            || temp_dec < 0
+            || temp_dec > 100
+            || hum < 1
+            || hum > 100
+            || hum_dec < 0
+            || hum_dec > 99
+            )
+        {
+          snprintf(tmp, 
+              50, 
+              "TH read wrong: %d.%d t %d.%d h",
+              temp,
+              temp_dec,
+              hum,
+              hum_dec
+          );
+          Serial.println(tmp);
+          Serial.println("toggle sens type");
+          
+          dht.toggle_type();
+          tcfg.sensType = dht.type;
+          writeConfig(&tcfg);
+        }
+        else {
+          snprintf(tmp, 50, "%d.%d", temp, temp_dec);
+          client.publish(outTempTopic, tmp);
+          Serial.println(tmp);
+  
+          snprintf(tmp, 50, "%d.%d", hum, hum_dec);
+          client.publish(outHumTopic, tmp);
+          Serial.println(tmp);  
+        }
+    }
+    else {
+        Serial.println("DHT READ not OK, not sending messages");
+    }     
+         
     sendRelaysStatus();
+    DEBUG_SERIAL("sendHumTemp end");
 }
 
 
@@ -576,238 +631,11 @@ void resolveZeroConf(
         *port = fallbackPort;
         
         Serial.println("ZeroConf Service not found.");
-        Serial.println("Falling back to:");
-        Serial.println(addr);
-        Serial.println(*port);
+        Serial.printf("Falling back to: %s:%d\n", addr, *port);
     }
 }
 
 
-void upper(char str[], size_t n) {
-    int i = 0;
-    for (i=0; i<n; i++) {
-
-        if (str[i] == 0) {
-            break;
-        }
-
-        if(str[i] >= 'a' && str[i] <= 'z') { 
-            str[i] = str[i] - ('a' - 'A');
-        } 
-
-    } 
-}
-
-
-void factoryConfig () {
-
-        Serial.println("Factory config");
-        
-        char newname[20];
-        memset(&newname, 0, 20);
-
-        snprintf(newname, 20, "THERMO_%s", macStr + 9);
-        upper(newname, 20);
-        
-        Serial.println(newname);
-        strcpy(tcfg.name, newname); 
-
-        strcpy(tcfg.essid, WIFI_SSID);
-        strcpy(tcfg.pass, WIFI_PASS);
-        
-        strcpy(tcfg.server, MQTT_SERVER);
-        tcfg.port = MQTT_PORT;
-        
-        strcpy(tcfg.otaserver, OTA_SERVER);
-        tcfg.otaport = OTA_PORT;
-        
-        tcfg.sensType = SENS_DHT22;
-        strcpy(tcfg.note, "a");
-}
-
-
-void writeConfig() {
-     
-        File f;   
-        StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
-        JsonObject& cfg = jsonBuffer.createObject();
-
-        cfg["NAME"] = tcfg.name;
-        
-        cfg["ESSID"] = tcfg.essid;
-        cfg["PASS"] = tcfg.pass;
-        
-        cfg["SRV"] = tcfg.server;
-        cfg["SRVP"] = tcfg.port;
-        
-        cfg["OTASRV"] = tcfg.otaserver;
-        cfg["OTASRVP"] = tcfg.otaport;
-        
-        cfg["SENS"] = tcfg.sensType;
-        
-        cfg["NOTE"] = tcfg.note;
-        
-        f = SPIFFS.open("/config.json", "w");
-        Serial.println("config.json open");
-        cfg.printTo(f);
-        f.close();
-        
-        //f = SPIFFS.open("/config.json", "r");
-        //f.printTo(Serial);
-        //f.close();
-
-}
-
-
-bool loadConfig() {
-    
-    StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
-    File f = SPIFFS.open("/config.json", "r+");
-    
-    if (f) {
-        Serial.println("config.json exist");
-        Serial.println(f);
-        
-        JsonObject& myconfig = jsonBuffer.parseObject(f);
-        
-        if (myconfig.success() == false) {
-            Serial.println("JSON parsing failed");
-            return false;
-        }
-        
-        myconfig.printTo(Serial);
-        Serial.print("\r\n");
-      
-        if (myconfig.containsKey("NAME")) {
-            strcpy(tcfg.name, myconfig["NAME"]);
-            if (strlen(tcfg.name) == 0) {
-                Serial.println("NAME1");
-                return false;
-            }
-        }
-        else {
-            Serial.println("NAME2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("SRV")) {
-            strcpy(tcfg.server, myconfig["SRV"]);
-            if (strlen(tcfg.server) == 0) {
-                Serial.println("SRV1");
-                return false;
-            }
-        }
-        else {
-            Serial.println("SRV2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("SRVP")) {
-            tcfg.port = myconfig["SRVP"];
-            if (tcfg.port == 0) { 
-                return false;
-            }
-        }
-        else {
-            Serial.println("SRVP");
-            return false;
-        }
-        
-        if (myconfig.containsKey("OTASRV")) {
-            strcpy(tcfg.otaserver, myconfig["OTASRV"]);
-            if (strlen(tcfg.otaserver) == 0) {
-                Serial.println("OTASRV1");
-                return false;
-            }
-        }
-        else {
-            Serial.println("OTASRV2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("OTASRVP")) {
-            tcfg.otaport = myconfig["OTASRVP"];
-            if (tcfg.otaport == 0) { 
-                return false;
-            }
-        }
-        else {
-            Serial.println("OTASRVP");
-            return false;
-        }
-        
-        
-        if (myconfig.containsKey("ESSID")) {
-            strcpy(tcfg.essid, myconfig["ESSID"]);
-            if (strlen(tcfg.essid) == 0) {
-                Serial.println("ESSID1");
-                return false;
-            }
-        }
-        else {
-            Serial.println("ESSID2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("PASS")) {
-            strcpy(tcfg.pass, myconfig["PASS"]);
-            if (strlen(tcfg.pass) == 0) {
-                Serial.println("PASS1");
-                return false;
-            }
-        }
-        else {
-            Serial.println("PASS2");
-            return false;
-        }
-        
-        if (myconfig.containsKey("SENS")) {
-            tcfg.sensType = myconfig["SENS"];
-        }
-        else {
-            Serial.println("SENS");
-            return false;
-        }
-        
-        if (myconfig.containsKey("NOTE")) {
-            strcpy(tcfg.note, myconfig["NOTE"]);
-        }
-        else {
-            Serial.println("NOTE2");
-            return false;
-        }
-    
-        f.close();
-    }
-    
-    else {
-        return false;
-    }
-
-    return true;
-}
-
-
-void initConfig() {
-    
-    Serial.println("INIT START");
-
-    if (SPIFFS.begin()) {
-        Serial.println("SPIFFS begin ok!");
-        
-        if (loadConfig() == false) {
-        //if (1) {
-            Serial.println("loadconfig fail");
-            factoryConfig();
-            writeConfig();
-        }
-    }
-    else 
-    {
-        Serial.println("SPIFFS begin fail!");
-    }
-    Serial.println("INIT DONE\n");
-}
 
 
 void initTopics() {
@@ -835,6 +663,12 @@ void initTopics() {
     
     snprintf(outSwitch1Topic, MAX_TOPIC, temp_outSwitchTopic, tcfg.name, 1);
     Serial.println(outSwitch1Topic);
+    
+    snprintf(availSwitch0Topic, MAX_TOPIC, temp_availSwitchTopic, tcfg.name, 0);
+    Serial.println(availSwitch0Topic);
+    
+    snprintf(availSwitch1Topic, MAX_TOPIC, temp_availSwitchTopic, tcfg.name, 1);
+    Serial.println(availSwitch1Topic);
 
 }
 

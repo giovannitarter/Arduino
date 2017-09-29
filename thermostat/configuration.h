@@ -47,7 +47,9 @@
 #define temp_hostname "%s"
 #define temp_outTempTopic "devices/%s/temperature"
 #define temp_outHumTopic "devices/%s/humidity"
+
 #define temp_outSwitchTopic "devices/%s/switch%d/state"
 #define temp_inSwitchTopic "devices/%s/switch%d/cmd"
+#define temp_availSwitchTopic "devices/%s/switch%d/avail"
 
 #endif
