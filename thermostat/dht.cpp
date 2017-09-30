@@ -176,6 +176,22 @@ char DHT::read_dht()
         else {
             res = DHTLIB_ERROR_CFG;
         }
+ 
+        if (
+            temp < 3 
+            || temp > 80 
+            || temp_dec < 0
+            || temp_dec > 100
+            || hum < 1
+            || hum > 100
+            || hum_dec < 0
+            || hum_dec > 99
+            )
+        {
+            res = DHTLIB_ERROR_VALUE; 
+        }
+
+
     }
 
     lastReadTime = millis();

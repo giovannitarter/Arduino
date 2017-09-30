@@ -9,11 +9,11 @@
 #include <ESP8266httpUpdate.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266WebServer.h>
-
 #include <FS.h>
 #include <Ticker.h>
 
 #include "PubSubClient.h"
+#include "RunningAverage.h"
 
 #include "persistent_config.h"
 #include "thermostat.h"
@@ -56,7 +56,10 @@
 #define OTA_LOCATION "/thermostat.bin"
 
 
-#define DISCOVERY_PERIOD 60
+#define RUNNING_AVERAGE_SAMPLES 50
+#define DISCOVERY_PERIOD 150
+#define READ_SENSOR_PERIOD 3
+#define SEND_DATA_PERIOD 150
 
 
 //in msec
@@ -70,8 +73,6 @@
 #define DHTPIN 14
 
 #define MAX_TOPIC 40
-
-#define SEND_DATA_PERIOD 30
 
 #define temp_hostname "%s"
 #define temp_outTempTopic "devices/%s/temperature"
@@ -95,7 +96,13 @@ void reconnect();
 void sendRelaysStatus();
 void sendHumTemp();
 
-void upper(char str[], size_t n);
+void readSensor();
+
+void callbackDataReader();
+void callbackReadSensor();
+void callbackDiscovery();
+void callbackGetTime();
+
 
 void callback(
         char * topic, 

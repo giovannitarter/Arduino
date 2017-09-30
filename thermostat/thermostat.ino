@@ -9,7 +9,12 @@ Ticker statusLedTck;
 Ticker dataReaderTck;
 Ticker getTimeTck;
 Ticker sendDiscoveryTck;
+Ticker readSensorTck;
 
+RunningAverage ra_temp(RUNNING_AVERAGE_SAMPLES);
+RunningAverage ra_hum(RUNNING_AVERAGE_SAMPLES);
+
+uint8_t fireSensorRead;
 uint8_t fireSend;
 uint8_t readTime;
 uint8_t fireDiscovery;
@@ -149,7 +154,7 @@ void setup()
     getMac(myMac);
     macToString(myMac, macStr);
     Serial.println(macStr);
- 
+
     memset(&newname, 0, 20);
     snprintf(newname, 20, "THERMO_%s", macStr + 9);
     upper(newname, 20);
@@ -178,52 +183,74 @@ void setup()
         return;
     };
 
+    readSensor();
+
     client.setCallback(callback);
     initTopics();    
     
     disconnectWifi();
     reconnect();
-    
 }
 
 
 void loop()
 {
 
-  if (httpCfgEn) {
-    server.handleClient();
-    return;
-  }
+    if (httpCfgEn) {
+      server.handleClient();
+      return;
+    }
+    
+    client.loop();
+    yield();
+    
+    if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
+      Serial.println("\n\n\rDISCONNECTED!");
+      reconnect();
+    }
+    
+    client.loop();
+    yield();
+    
+    if (fireSensorRead) {
+      readSensor(); 
+      fireSensorRead = 0;
+    }
+    
+    client.loop();
+    yield();
+    
+    if (fireDiscovery) {
+      sendDiscovery();
+      fireDiscovery = 0;
+    }
+    
+    client.loop();
+    yield();
+    
+    if (fireSendRelay) {
+      sendRelaysStatus();
+      fireSendRelay = 0;
+    }
 
-  client.loop();
+    client.loop();
+    yield();
+    
+    if (fireSend) {
+      sendHumTemp();
+      fireSend = 0;
+    }
 
-  if (getWifiStatus() != WL_CONNECTED || client.connected() == 0) {
-    Serial.println("\n\n\rDISCONNECTED!");
-    reconnect();
-  }
-  
-  if (fireDiscovery) {
-    sendDiscovery();
-    fireDiscovery = 0;
-  }
-  
-  if (fireSendRelay) {
-    sendRelaysStatus();
-    fireSendRelay = 0;
-  }
-
-  if (fireSend) {
-    sendHumTemp();
-    fireSend = 0;
-  }
-  
-  if (readTime) {
-    my_ctime = getTime();
-    printTime(my_ctime);
-    readTime = 0;
-  }
-
-  client.loop();
+    client.loop();
+    yield();
+    
+    if (readTime) {
+      my_ctime = getTime();
+      printTime(my_ctime);
+      readTime = 0;
+    }
+    
+    client.loop();
 }
 
 
@@ -346,8 +373,21 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
     }
     
     else if (strcmp(topic, resetTopic) == 0) {
-          Serial.println("Reset received, reset");
-          ESP.restart();
+
+        uint16_t reset_in;
+        unsigned long reset_time;
+        
+        reset_in = (myMac[4] << 8) + myMac[5];
+        reset_in = reset_in % 30000;         
+        Serial.printf("reset in %d millis\n", reset_in);  
+        reset_time = millis() + reset_in;
+            
+        while(millis() < reset_time) {
+            yield();
+        }
+
+        Serial.println("Reset!");
+        ESP.restart();
     }
     
     else if (strcmp(topic, cfg_topic) == 0) {
@@ -366,17 +406,22 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
 }
 
 
-void callbackDataReader () {
+void callbackDataReader() {
   fireSend = 1;
 }
 
 
-void callbackDiscovery () {
+void callbackReadSensor() {
+  fireSensorRead = 1;
+}
+
+
+void callbackDiscovery() {
   fireDiscovery = 1;
 }
 
 
-void callbackGetTime() {
+void callbackGetTime(){
   readTime = 1;	
 }
 
@@ -389,6 +434,8 @@ void checkUpdates() {
         );
 #ifndef SKIP_UPDATE
     checkOTA(tcfg.otaserver, tcfg.otaport);
+#else
+    Serial.println("Skipping update check because of builf cfg");
 #endif
     Serial.println("");
 } 
@@ -399,7 +446,8 @@ void reconnect () {
     int i;
     dataReaderTck.detach();
     sendDiscoveryTck.detach();
-  
+    readSensorTck.detach();
+
     clearPin(STATUS_LED);
     clearPin(RELAY0);
     clearPin(RELAY1);
@@ -475,8 +523,9 @@ void reconnect () {
             Serial.println("> MQTT processing pending messages end");
  
             dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
-            sendDiscoveryTck.attach(DISCOVERY_PERIOD, callbackDiscovery);
-            
+            sendDiscoveryTck.attach(DISCOVERY_PERIOD, callbackDiscovery);           
+            readSensorTck.attach(READ_SENSOR_PERIOD, callbackReadSensor);           
+ 
             fireDiscovery = 1;
             fireSend = 1; 
             fireSendRelay = 1; 
@@ -500,6 +549,7 @@ void reconnect () {
 
 
 void sendDiscovery() {
+    Serial.println("> MQTT Sending Discovery");
     DEBUG_SERIAL("sendDiscovery start");
     if (client.connected()) {
         client.publish(discoveryTopic, tcfg.name, false);
@@ -508,40 +558,35 @@ void sendDiscovery() {
 }
 
 
-void sendHumTemp() {
+void readSensor() {
+    
+    //Serial.println("ReadSensor");
+    float temp = 0.0, hum = 0.0;
+    uint8_t res;    
+    char tmp[50];
 
-    uint8_t temp, temp_dec, hum, hum_dec;
-    char tmp[50], res;
-  
-    DEBUG_SERIAL("sendHumTemp start");
     res = dht.read_dht();
     DEBUG_SERIAL("read dht done");
 
-    temp = dht.temp;
-    temp_dec = dht.temp_dec;
-    hum = dht.hum;
-    hum_dec = dht.hum_dec;
-    
     if (res == DHTLIB_OK) {
  
-        if (
-            temp < 3 
-            || temp > 80 
-            || temp_dec < 0
-            || temp_dec > 100
-            || hum < 1
-            || hum > 100
-            || hum_dec < 0
-            || hum_dec > 99
-            )
-        {
-          snprintf(tmp, 
-              50, 
-              "TH read wrong: %d.%d t %d.%d h",
-              temp,
-              temp_dec,
-              hum,
-              hum_dec
+        temp = dht.temp + (dht.temp_dec / 10.0) ;
+        ra_temp.addValue(temp);
+        
+        hum = dht.hum + (dht.hum_dec / 10.0) ;
+        ra_hum.addValue(hum);
+
+    }
+
+    else if (res == DHTLIB_ERROR_VALUE) {
+        snprintf(
+            tmp, 
+            50, 
+            "TH read wrong: %d.%d t %d.%d h",
+            dht.temp,
+            dht.temp_dec,
+            dht.hum,
+            dht.hum_dec
           );
           Serial.println(tmp);
           Serial.println("toggle sens type");
@@ -549,21 +594,36 @@ void sendHumTemp() {
           dht.toggle_type();
           tcfg.sens_type = dht.type;
           writeConfig(&tcfg);
-        }
-        else {
-          snprintf(tmp, 50, "%d.%d", temp, temp_dec);
-          client.publish(outTempTopic, tmp);
-          Serial.println(tmp);
+      
+    }
+    
+    else {
+        Serial.printf("DHT READ not OK (res: %d), not sending messages\n", res);
+    } 
+}
+
+
+void sendHumTemp() {
+    
+    DEBUG_SERIAL("sendHumTemp start");
+
+    char tmp_temp[10], tmp_hum[10];
+    float hum, temp;
+
+    if (ra_temp.getCount() > 0 && ra_hum.getCount() > 0) {
+
+        dtostrf(ra_temp.getAverage(), 3, 1, tmp_temp);
+        client.publish(outTempTopic, tmp_temp);
   
-          snprintf(tmp, 50, "%d.%d", hum, hum_dec);
-          client.publish(outHumTopic, tmp);
-          Serial.println(tmp);  
-        }
+        dtostrf(ra_hum.getAverage(), 3, 1, tmp_hum);
+        client.publish(outHumTopic, tmp_hum);
+        
+        Serial.printf("> MQTT sending data %s %s\n", tmp_temp, tmp_hum);  
     }
     else {
-        Serial.printf("DHT READ not OK (res: %s), not sending messages\n", res);
-    }     
-         
+        Serial.println("Not sending data, running averages empty");
+    }
+    
     sendRelaysStatus();
     DEBUG_SERIAL("sendHumTemp end");
 }

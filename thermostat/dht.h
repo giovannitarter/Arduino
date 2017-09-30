@@ -16,16 +16,10 @@
 #ifndef dht_h
 #define dht_h
 
-#if defined(ARDUINO) && (ARDUINO >= 100)
 #include <Arduino.h>
-#else
-#include <WProgram.h>
-#endif
-
-#define DHT11LIB_VERSION "0.4.1"
 
 #define DHTLIB_OK 0
-#define DHTLIB_ERROR_CHECKSUM 2
+#define DHTLIB_ERROR_CHECKSUM 1
 #define DHTLIB_ERROR_TIMEOUT 2
 #define DHTLIB_ERROR_CFG 3
 #define DHTLIB_ERROR_VALUE 4
@@ -36,7 +30,7 @@
 
 #define MIN_READ_INTERVAL 2500 //ms
 
-#define DTH_READ_TIMEOUT 20 //ms
+#define DTH_READ_TIMEOUT 5 //ms
 
 class DHT
 {
