@@ -7,9 +7,13 @@
 #define ASCII_NEWLINE 10
 
 
-#define DELAY_CLK 4 //us
+//#define DELAY_CLK 4 //us
+//#define BUSY_TIMEOUT 2 //ms
+//#define SHR_DELAY 4 //us
+
+#define DELAY_CLK 6 //us
 #define BUSY_TIMEOUT 2 //ms
-#define SHR_DELAY 4 //us
+#define SHR_DELAY 6 //us
 
 
 //shift register
@@ -52,7 +56,7 @@ void writebyte(uint8_t character);
 void writeshr(uint8_t character);
 void setup_parport();
 
-
+void writeline();
 
 
 #endif

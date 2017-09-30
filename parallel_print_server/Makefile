@@ -3,10 +3,10 @@ SKETCH = parallel_print_server.ino
 UPLOAD_PORT = /dev/ttyUSB0
 
 
-BOARD = nodemcuv2
-BOARD = d1
-UPLOAD_SPEED = 921600
-VERBOSE = 1
+#BOARD = nodemcuv2
+#BOARD = d1
+#UPLOAD_SPEED = 921600
+#VERBOSE = 1
 
 #BOARD = d1
 #UPLOAD_SPEED = 921600
@@ -14,10 +14,10 @@ VERBOSE = 1
 #FLASH_DEF = 4M3M
 
 
-#BOARD = generic
-#UPLOAD_SPEED = 115200
-#FLASH_MODE = qio
-#FLASH_DEF = 4M3M
+BOARD = generic
+UPLOAD_SPEED = 115200
+FLASH_MODE = qio
+FLASH_DEF = 4M3M
 
 
 

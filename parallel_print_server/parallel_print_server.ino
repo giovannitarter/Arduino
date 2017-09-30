@@ -44,7 +44,8 @@ void setupServer() {
     MDNS.addService("printer", "tcp", 9100); 
     
     server.begin();
-    server.setNoDelay(true);
+    //server.setNoDelay(true);
+    server.setNoDelay(false);
   
     Serial.print("Ready! IP:");
     Serial.println(WiFi.localIP());
@@ -74,19 +75,18 @@ void loopServer() {
             {
                 Serial.print("available: ");
                 Serial.println(bavail);
-                Serial.println("data:");
-                input = (char *) malloc(bavail + 1);
+                //Serial.println("data:");
+                input = (char *) malloc(bavail);
  
                 for(j = 0; j<bavail; j++) {
                     input[j] = client.read();
-                    Serial.print(input[j], HEX);
-                    Serial.print(" ");
+                    //Serial.print(input[j], HEX);
+                    //Serial.print(" ");
                 }
-                input[j] = 0;
-                Serial.println("");
+                //Serial.println("");
             
-                for(j = 0; j < bavail + 1; j++) {
-                    //writebyte(input[j]);
+                for(j = 0; j < bavail; j++) {
+                    writebyte(input[j]);
                 }
 
                 free(input);
@@ -95,7 +95,7 @@ void loopServer() {
 
         // close the connection:
         client.stop();
-        Serial.println("[Client disonnected]");
+        Serial.println("[Client disconnected]");
     }
 }
 
@@ -113,19 +113,17 @@ void setup()
 }
 
 
-void loop() 
-{
-    loopServer(); 
- 
+void test_loop() {
     
-/*
+    int bavail;
+    char incomingByte;
+    
     Serial.println("\nwaiting for input:");
  
     while (Serial.available() == 0) {
+        yield();
     }
 
-    int bavail;
-    char incomingByte;
     bavail = Serial.available();
 
     if (bavail > 0) {
@@ -141,19 +139,14 @@ void loop()
             Serial.println("Line finished!");  
         }
     }
-  */  
 
-    /*
-    char incomingByte;
-    if (Serial.available()) {
-        
-        delay(1);
-        while(Serial.available()) {
-          incomingByte = Serial.read();
-          writebyte(incomingByte);
-        }
-        writeshr(0);
+
+}
+
+
+void loop() 
+{
+    loopServer(); 
+    //test_loop();
     
-    }
-    */
 }

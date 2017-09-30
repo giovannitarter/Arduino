@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
         response = None
         if PIPE in readable:
-            response = os.read(PIPE, 400)
+            response = os.read(PIPE, 1460)
         
         if response is not  None:
             vprint("received from pipe: {}".format(response))
