@@ -1,9 +1,7 @@
-
-
-
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
-#include "configuration.h"
+
+#include "thermostat.h"
 #include "otaupdates.h"
 
 

@@ -36,7 +36,7 @@
 
 #define MIN_READ_INTERVAL 2500 //ms
 
-#define DTH_READ_TIMEOUT 5 //ms
+#define DTH_READ_TIMEOUT 20 //ms
 
 class DHT
 {

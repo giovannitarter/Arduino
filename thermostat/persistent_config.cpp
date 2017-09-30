@@ -1,6 +1,31 @@
 #include "persistent_config.h"
 
 
+void reset_config() {
+    SPIFFS.remove(CONFIG_FILE_PATH);
+}
+
+
+void factoryConfig(thermoCfg * tcfg, char name []) {
+
+        Serial.println("Factory config");
+        
+        strncpy(tcfg->name, name, MAX_ADDR); 
+
+        strncpy(tcfg->essid, DEFAULT_WIFI_SSID, MAX_ADDR);
+        strncpy(tcfg->pass, DEFAULT_WIFI_PASS, MAX_ADDR);
+        
+        strncpy(tcfg->server, DEFAULT_MQTT_SERVER, MAX_ADDR);
+        tcfg->port = DEFAULT_MQTT_PORT;
+        
+        strncpy(tcfg->otaserver, DEFAULT_OTA_SERVER, MAX_ADDR);
+        tcfg->otaport = DEFAULT_OTA_PORT;
+        
+        tcfg->sens_type = DEFAULT_SENS_TYPE;
+        strncpy(tcfg->note, DEFAULT_NOTE, MAX_ADDR);
+}
+
+
 void writeConfig(thermoCfg * tcfg) {
      
         File f;   
@@ -27,7 +52,7 @@ void writeConfig(thermoCfg * tcfg) {
                 aJson.createItem(tcfg->otaserver));
         aJson.addNumberToObject(root, "OTASRVP", tcfg->otaport); 
         
-        aJson.addNumberToObject(root, "SENS", tcfg->sensType);
+        aJson.addNumberToObject(root, "SENS", tcfg->sens_type);
         
         aJson.addItemToObject(root, "NOTE", 
                 aJson.createItem(tcfg->note));
@@ -37,14 +62,14 @@ void writeConfig(thermoCfg * tcfg) {
         
         wbuf_len = strlen(wbuf);
     
-        f = SPIFFS.open("/config.json", "w");
-        Serial.println("config.json open for write");
+        f = SPIFFS.open(CONFIG_FILE_PATH, "w");
+        Serial.printf("File %s open for write", CONFIG_FILE_PATH);
         f.write((uint8_t *)wbuf, wbuf_len);
         f.close();
 
         free(wbuf);
 
-
+        dump_cfg_file();
 }
 
 
@@ -57,7 +82,7 @@ void dump_cfg_file() {
     Serial.println("################");
     Serial.println("DUMPING CFG FILE");
     
-    f = SPIFFS.open("/config.json", "r");
+    f = SPIFFS.open(CONFIG_FILE_PATH, "r");
     if (f) {
         size = f.size();
         buf = (char *) malloc(size);
@@ -85,7 +110,7 @@ bool loadConfig(thermoCfg * tcfg) {
     
     dump_cfg_file();
 
-    f = SPIFFS.open("/config.json", "r+");
+    f = SPIFFS.open(CONFIG_FILE_PATH, "r+");
         
     if (f) {
         f.read((uint8_t *)buf, 400);
@@ -95,7 +120,7 @@ bool loadConfig(thermoCfg * tcfg) {
         return false;
     }
     
-    Serial.println("config.json exist");
+    Serial.printf("File %s exist\n", CONFIG_FILE_PATH);
         
     root = aJson.parse(buf);    
     if (root == NULL) {
@@ -175,8 +200,8 @@ bool loadConfig(thermoCfg * tcfg) {
     
     aJsonObject * sens_type = aJson.getObjectItem(root, "SENS");    
     if (sens_type) {
-        tmpcfg.sensType = sens_type->valueint;
-        Serial.printf("lcfg: SENS: %d\n", tmpcfg.port);
+        tmpcfg.sens_type = sens_type->valueint;
+        Serial.printf("lcfg: SENS: %d\n", tmpcfg.sens_type);
     }
     else {
         Serial.println("Cannot parse SENS");
@@ -195,25 +220,57 @@ bool loadConfig(thermoCfg * tcfg) {
     
     aJson.deleteItem(root);
 
-    if(otaport == srvp) {
-        Serial.println("SRV Port cannot be equal to OTA Port");
-        return false;
-    }
-
     memcpy(tcfg, &tmpcfg, sizeof(thermoCfg));
     return true;
 }
-     
-        
-void setup_config(thermoCfg * tcfg) {
     
+
+bool verify_config(thermoCfg * tcfg) {
+
+    bool res;
+
+    res = true;
+
+    if (strlen(tcfg->name) == 0) {
+        res = false;
+    }
+    
+    if (res) {
+        if(tcfg->otaport == tcfg->port) {
+            Serial.println("SRV Port cannot be equal to OTA Port");
+            res = false;
+        }
+    }
+
+    return res;
+}
+ 
+
+void setup_config(thermoCfg * tcfg, char name[]) {
+    
+    bool need_factory;
+    need_factory = true;
+
     Serial.println("setup config START");
 
     if (SPIFFS.begin()) {
         Serial.println("SPIFFS begin ok!");
         
-        if (loadConfig(tcfg) == false) {
+        if (loadConfig(tcfg)) {
+            
+            if (verify_config(tcfg)) {
+                need_factory = false;
+            }
+            else {
+                Serial.println("verify fail");
+            }
+        }
+        else {
             Serial.println("loadconfig fail");
+        }
+            
+        if (need_factory) {
+            factoryConfig(tcfg, name);
             writeConfig(tcfg);
         }
     }

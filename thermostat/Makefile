@@ -20,7 +20,10 @@ FLASH_DEF = 4M3M
 FW_VERSION ?= "0"
 
 #CPP_EXTRA = -DDEBUG_ESP_HTTP_UPDATE -DDEBUG_ESP_PORT=Serial
+
 CPP_EXTRA += -DFW_VERSION=\"$(FW_VERSION)\"
+#CPP_EXTRA += -DFW_VERSION=\"$(FW_VERSION)\" -DSKIP_UPDATE="1"
+
 #CPP_EXTRA += -DMDNS_DEBUG_TX
 BUILD_DIR = $(HOME)/Arduino/thermostat/out
 
@@ -54,6 +57,12 @@ deploy:
 	else \
 		echo "NOT RECOMPILED"; \
 	fi;
+
+
+uploadm:
+	make upload
+	make monitor
+
 
 forcedeploy:
 	make clean

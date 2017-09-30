@@ -1,10 +1,9 @@
 #ifndef _CONFIG_H_WIRELESS_
 #define _CONFIG_H_WIRELESS_
 
-#include <Arduino.h>
-#include "configuration.h"
+#include "thermostat.h"
 
-void setupWifi();
+void setup_wifi(char ssid[], char pass[]);
 uint8_t getWifiStatus();
 
 void getMac(uint8_t mac[6]);

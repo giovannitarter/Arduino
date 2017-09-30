@@ -1,30 +1,5 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266httpUpdate.h>
-
-#include "PubSubClient.h"
-
-#include <Ticker.h>
-
-#include "configuration.h"
 #include "thermostat.h"
-#include "wireless.h"
-#include "ntp.h"
-#include "pinio.h"
-#include "dht.h"
-#include "otaupdates.h"
-#include "utils.h"
-
-#define MAX_PAYLOAD 4
-#define SWITCH_ON "ON"
-#define SWITCH_OFF "OFF"
  
-#include <ESP8266mDNS.h>
-#include <ESP8266WebServer.h>
-
-#include "FS.h"
-#include "persistent_config.h"
-
 thermoCfg tcfg;
 
 WiFiClient espClient;
@@ -53,9 +28,12 @@ char outSwitch1Topic[MAX_TOPIC];
 char inSwitch1Topic[MAX_TOPIC];
 char availSwitch1Topic[MAX_TOPIC];
 
+char cfg_topic[MAX_TOPIC];
+
 
 char discoveryTopic[] = "espdiscovery";
 char resetTopic[] = "espreset";
+
 
 long lastMsg = 0;
 char msg[50];
@@ -146,37 +124,12 @@ void httpConfig() {
 }
 
 
-void factoryConfig (thermoCfg * tcfg) {
-
-        Serial.println("Factory config");
-        
-        char newname[20];
-        memset(&newname, 0, 20);
-
-        snprintf(newname, 20, "THERMO_%s", macStr + 9);
-        upper(newname, 20);
-        
-        Serial.println(newname);
-        strcpy(tcfg->name, newname); 
-
-        strcpy(tcfg->essid, WIFI_SSID);
-        strcpy(tcfg->pass, WIFI_PASS);
-        
-        strcpy(tcfg->server, MQTT_SERVER);
-        tcfg->port = MQTT_PORT;
-        
-        strcpy(tcfg->otaserver, OTA_SERVER);
-        tcfg->otaport = OTA_PORT;
-        
-        tcfg->sensType = SENS_DHT22;
-        strcpy(tcfg->note, "a");
-}
-
-
 void setup()
 {
-    int i;
+    int i, j;
     char * ptr;
+    char newname[20];
+    uint8_t btnStatus = 0;
    
     delay(2000);
  
@@ -189,22 +142,26 @@ void setup()
     Serial.println();
     Serial.println();
     Serial.println("\n\n\n\rBOOT");
-  
+    
+    Serial.println("VERSION: " FW_VERSION);
+
     Serial.print("MAC: ");
     getMac(myMac);
     macToString(myMac, macStr);
     Serial.println(macStr);
  
-    factoryConfig(&tcfg);
-    setup_config(&tcfg); 
-    dht.type = tcfg.sensType;
+    memset(&newname, 0, 20);
+    snprintf(newname, 20, "THERMO_%s", macStr + 9);
+    upper(newname, 20);
+    Serial.printf("Default name: %s\n", newname);
+    
+    setup_config(&tcfg, newname); 
+    dht.type = tcfg.sens_type;
  
     setupPins();
 
-    int j;
-    uint8_t btnStatus = 0;
-
     Serial.println("Press btn2 now to enter config.");
+    btnStatus = 0;
     for (j=0; j<20; j++) {
         btnStatus = getPinState(BT2);
         if (getPinState(BT2) == 0) {
@@ -215,8 +172,6 @@ void setup()
     } 
     Serial.println("Config window stop.");
     
-       
-
     //httpCfgEn = 1;
     if (httpCfgEn) { 
         httpConfig();
@@ -225,6 +180,8 @@ void setup()
 
     client.setCallback(callback);
     initTopics();    
+    
+    disconnectWifi();
     reconnect();
     
 }
@@ -335,70 +292,77 @@ void sendRelaysStatus() {
 
 void callback(char * topic, unsigned char * payload, unsigned int length) {
 
-  char err[50];
-  char * payloadStr = (char *) payload;
-  int maxPayload = MAX_PAYLOAD;
-  
-  if (length < maxPayload) {
-    maxPayload = length;
-  }
-  
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println();
-
-  if (strcmp(topic, inSwitch0Topic) == 0) {
-    if (strncmp(payloadStr, SWITCH_ON, length) == 0) 
-    {
-      setPin(RELAY0);
+    char err[50];
+    char * payloadStr = (char *) payload;
+    int maxPayload = MAX_PAYLOAD;
+    
+    if (length < maxPayload) {
+        maxPayload = length;
     }
-    else if (strncmp(
-      payloadStr, 
-      SWITCH_OFF, 
-      maxPayload) == 0) {
-      
-      clearPin(RELAY0);
+    
+    Serial.print("> MQTT Message [");
+    Serial.print(topic);
+    Serial.print("] ");
+    for (int i = 0; i < length; i++) {
+        Serial.print((char)payload[i]);
     }
+    Serial.println();
+    
+    if (strcmp(topic, inSwitch0Topic) == 0) {
+        if (strncmp(payloadStr, SWITCH_ON, length) == 0) 
+        {
+            setPin(RELAY0);
+        }
+        else if (strncmp(
+            payloadStr, 
+            SWITCH_OFF, 
+            maxPayload) == 0) {
+                    
+            clearPin(RELAY0);
+            }
+        else {
+            snprintf(err, 50, 
+            "wrong message \"%s\" on topic \"%s\"",
+            payload, 
+            topic);
+            Serial.println(err);
+        }
+    }
+    
+    else if (strcmp(topic, inSwitch1Topic) == 0) {
+      if (strncmp(payloadStr, SWITCH_ON, maxPayload) == 0) {
+        setPin(RELAY1);
+      }
+      else if (strncmp(payloadStr, SWITCH_OFF, maxPayload) == 0) {
+        clearPin(RELAY1);
+      }
+      else {
+        snprintf(err, 50, 
+        "wrong message \"%s\" on topic \"%s\"",
+        payload, 
+        topic);
+        Serial.println(err);
+      }
+    }
+    
+    else if (strcmp(topic, resetTopic) == 0) {
+          Serial.println("Reset received, reset");
+          ESP.restart();
+    }
+    
+    else if (strcmp(topic, cfg_topic) == 0) {
+      Serial.println("Cfg Topic");
+      reset_config();
+      Serial.println("Reset");
+      ESP.restart();
+    }
+    
     else {
-      snprintf(err, 50, 
-      "wrong message \"%s\" on topic \"%s\"",
-      payload, 
-      topic);
+      snprintf(err, 50, "wrong topic \"%s\"", topic);
       Serial.println(err);
     }
-  }
-  
-  else if (strcmp(topic, inSwitch1Topic) == 0) {
-    if (strncmp(payloadStr, SWITCH_ON, maxPayload) == 0) {
-      setPin(RELAY1);
-    }
-    else if (strncmp(payloadStr, SWITCH_OFF, maxPayload) == 0) {
-      clearPin(RELAY1);
-    }
-    else {
-      snprintf(err, 50, 
-      "wrong message \"%s\" on topic \"%s\"",
-      payload, 
-      topic);
-      Serial.println(err);
-    }
-  }
-  
-  else if (strcmp(topic, resetTopic) == 0) {
-        Serial.println("Reset received, reset");
-        ESP.restart();
-  }
-  
-  else {
-    snprintf(err, 50, "wrong topic \"%s\"", topic);
-    Serial.println(err);
-  }
- 
-    fireSendRelay = 1;
+    
+      fireSendRelay = 1;
 }
 
 
@@ -423,8 +387,10 @@ void checkUpdates() {
         tcfg.otaserver, 
         tcfg.otaport
         );
+#ifndef SKIP_UPDATE
     checkOTA(tcfg.otaserver, tcfg.otaport);
-    Serial.printf("\n\n\n\r\n");
+#endif
+    Serial.println("");
 } 
 
 
@@ -441,24 +407,31 @@ void reconnect () {
     statusLedTck.attach_ms(100, togglePin, (uint8_t)STATUS_LED);
     
     my_ctime = getTime();
-	Serial.print("Reconnecting at: ");
+	Serial.print("Attempting connection at at: ");
     printTime(my_ctime); 
   
     if (getWifiStatus() != WL_CONNECTED) {
-        Serial.println("Reconnecting Wifi");
+        Serial.println("Wifi down, reconnecting");
     	
-        setupWifi();
+        setup_wifi(tcfg.essid, tcfg.pass);
+                
+        //when we get here, getWifiStatus returns WL_CONNECTED
+        setupNtp(); 
+
         //setupMDNS();
-        setupNtp();
     }
     else {
         Serial.println("Wifi already connected");
+    }
+    
+    if (getWifiStatus() == WL_CONNECTED) {
+        my_ctime = getTime();
+        printTime(my_ctime);
     }
   
     Serial.println("\n\rTrying to resolve OTA updates addr"); 
     resolveZeroConf(
         OTA_SERVICE, OTA_PROTO,
-        OTA_SERVER, OTA_PORT,
         tcfg.otaserver, &tcfg.otaport
         );
   
@@ -474,24 +447,32 @@ void reconnect () {
     //client.setServer(mqttAddr, mqttPort);
     client.setServer(tcfg.server, tcfg.port);
     
-    Serial.println("MQTT SERVER:");
-    Serial.println(tcfg.server);
-    Serial.println(tcfg.port);
-
+    Serial.printf("> MQTT SERVER: %s:%d\n", tcfg.server, tcfg.port);
     if (client.connected() == 0) {
         
-        Serial.println("Reconnecting MQTT");
+        Serial.println("> MQTT not connected, attempting connection");
         client.connect(tcfg.name);
+        
         if (client.connected()) {
+            
+            Serial.println("> MQTT connected");
             
             client.subscribe(inSwitch0Topic);
             client.subscribe(inSwitch1Topic);
             client.subscribe(resetTopic);
+            client.subscribe(cfg_topic);
            
+            Serial.println("> MQTT processing pending messages");
             for (i=0; i<5; i++) {
-                delay(1000);
+                
+                //time for messages to be received
+                delay(500);
+
+                Serial.println("> MQTT .");
                 client.loop();
+
             }
+            Serial.println("> MQTT processing pending messages end");
  
             dataReaderTck.attach(SEND_DATA_PERIOD, callbackDataReader);
             sendDiscoveryTck.attach(DISCOVERY_PERIOD, callbackDiscovery);
@@ -501,10 +482,14 @@ void reconnect () {
             fireSendRelay = 1; 
         }
         else {
-            Serial.println("MQTT connection failed");
+            Serial.println("> MQTT connection failed");
             delay(5000);
         }
     }
+    else {
+        Serial.println("> MQTT connected");
+    }
+    Serial.println("");
     
 
     statusLedTck.detach();
@@ -529,9 +514,7 @@ void sendHumTemp() {
     char tmp[50], res;
   
     DEBUG_SERIAL("sendHumTemp start");
-  
     res = dht.read_dht();
-    
     DEBUG_SERIAL("read dht done");
 
     temp = dht.temp;
@@ -564,7 +547,7 @@ void sendHumTemp() {
           Serial.println("toggle sens type");
           
           dht.toggle_type();
-          tcfg.sensType = dht.type;
+          tcfg.sens_type = dht.type;
           writeConfig(&tcfg);
         }
         else {
@@ -578,7 +561,7 @@ void sendHumTemp() {
         }
     }
     else {
-        Serial.println("DHT READ not OK, not sending messages");
+        Serial.printf("DHT READ not OK (res: %s), not sending messages\n", res);
     }     
          
     sendRelaysStatus();
@@ -601,8 +584,6 @@ void setupMDNS() {
 void resolveZeroConf(
     char * service, 
     char * proto, 
-    char * fallbackAddr,
-    uint16_t fallbackPort,
     char * addr,
     uint16_t * port
     )
@@ -620,22 +601,16 @@ void resolveZeroConf(
         
         strAddr.toCharArray(addr, MAX_ADDR);
 
-        Serial.println("ZeroConf Service resolved");
-        Serial.println(addr);
-        Serial.println(*port);
+        Serial.printf("ZeroConf Service resolved: %s:%d\n", addr, *port);
     }
     else {
-        WiFi.hostByName(fallbackAddr, tmpIp);
+        Serial.printf("ZeroConf Service not found. Resolving %s\n", addr);
+        WiFi.hostByName(addr, tmpIp);
         strAddr = tmpIp.toString();
         strAddr.toCharArray(addr, MAX_ADDR);
-        *port = fallbackPort;
-        
-        Serial.println("ZeroConf Service not found.");
-        Serial.printf("Falling back to: %s:%d\n", addr, *port);
+        Serial.printf("Addr resolved: %s:%d\n", addr, *port);
     }
 }
-
-
 
 
 void initTopics() {
@@ -670,6 +645,8 @@ void initTopics() {
     snprintf(availSwitch1Topic, MAX_TOPIC, temp_availSwitchTopic, tcfg.name, 1);
     Serial.println(availSwitch1Topic);
 
+    snprintf(cfg_topic, MAX_TOPIC, temp_cfg_topic, tcfg.name);
+    Serial.println(cfg_topic);
 }
 
 

@@ -1,8 +1,4 @@
-#include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
-
 #include "ntp.h"
-#include "wireless.h"
 
 
 const char* ntpServerName = NTP_SERVER;
@@ -107,7 +103,7 @@ unsigned long getTime() {
   	  
   	  int cb = udp.parsePacket();
   	  if (cb) {
-  	    Serial.print("packet received, length=");
+  	    //Serial.print("packet received, length=");
   	    Serial.println(cb);
   	    // We've received a packet, read the data from it
   	    udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer

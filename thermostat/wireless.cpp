@@ -1,13 +1,7 @@
 #include "wireless.h"
-#include <ESP8266WiFi.h>
-#include "configuration.h"
 
 
-char ssid[] = WIFI_SSID;
-char pass[] = WIFI_PASS;
-
-
-void setupWifi() {
+void setup_wifi(char ssid[], char pass[]) {
 
   disconnectWifi();
 
@@ -20,7 +14,7 @@ void setupWifi() {
   WiFi.begin(ssid, pass);
 
   while (getWifiStatus() != WL_CONNECTED) {
-    delay(100);
+    delay(500);
     Serial.print(".");  
   }
 
@@ -32,9 +26,8 @@ void setupWifi() {
 
 
 void disconnectWifi() {
-    if (getWifiStatus() == WL_CONNECTED) {
-        WiFi.disconnect();
-    }
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
 }
 
 

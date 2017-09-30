@@ -176,10 +176,6 @@ char DHT::read_dht()
         else {
             res = DHTLIB_ERROR_CFG;
         }
-        
-        if (hum > 100) {
-            res = DHTLIB_ERROR_VALUE;
-        }
     }
 
     lastReadTime = millis();

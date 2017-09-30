@@ -1,9 +1,7 @@
 #ifndef _NTP_THERMOSTAT_H_
 #define _NTP_THERMOSTAT_H_
 
-
-
-
+#include "thermostat.h"
 
 
 unsigned long sendNTPpacket(IPAddress& address);
