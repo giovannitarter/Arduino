@@ -7,6 +7,7 @@ import argparse
 import signal
 import sys
 import struct
+import time
 
 
 try:
@@ -110,17 +111,21 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, exit_gracefully)
     
     PIPE = os.open(PIPE_PATH, os.O_RDWR)
+
     EXIT = False
     response = None
     print_wait = True
+    SCK = None
 
     while(EXIT == False):
-    
+   
+        #time.sleep(0.5)
+
         if print_wait:
             vprint("wait")
             print_wait = False
         
-        #readable, writable, exceptional = select.select([PIPE],[],[], 1)
+        readable, writable, exceptional = select.select([PIPE],[],[], 1)
         try:
             readable, writable, exceptional = select.select([PIPE],[],[], 1)
         except Exception as e:
@@ -128,20 +133,23 @@ if __name__ == "__main__":
             print(e)
             pass
 
-        response = None
         if PIPE in readable:
-            response = os.read(PIPE, 1460)
-        
-        if response is not  None:
-            vprint("received from pipe: {}".format(response))
-        
+            time.sleep(0.3)
+            response = os.read(PIPE, 10000)
+
+            print("LEN {}".format(len(response)))
+            
+            if len(response) > 0:
+                vprint("received from pipe: {}".format(response))
+
             try:
                 SCK = socket.create_connection((SRV_ADDRESS, SRV_PORT), 5)
                 SCK.send(response)
                 SCK.close()
+            
             except Exception as e:
                 print("cannot setup socket for {}:{}, skipping".format(SRV_ADDRESS, SRV_PORT))
-
+                print(e)
             print_wait = True
 
     os.close(PIPE)

@@ -73,37 +73,47 @@ bool attemptConnection() {
 void loopServer() {
     
     int b_avail = 0, j = 0, b_read = 0;
-    static char input[MAX_PACKET];
+    static char input[MAX_PACKET], * cptr;
     WiFiClient client;
+    int total_bytes = 0;
 
     if (checkConnection == false) {
         while (attemptConnection() == false);
     }
 
-    client = server.available();    
+    client = server.available();
+    total_bytes = 0;
+    cptr = input;
+ 
     if (client)
     {
         Serial.println("[Client connected]");
-        while (client.connected())
+        while (client.connected() && total_bytes < MAX_PACKET - 1)
         {
             b_avail = client.available();
-
-            // read line by line what the client (web browser) is requesting
-            if (b_avail > 0)
-            {
-                memset(input, 0, MAX_PACKET);
-                Serial.printf("bytes available: %d\n", b_avail);
-                b_read = client.read((uint8_t *)input, b_avail);
-                Serial.printf("bytes read: %d\n", b_read);
-                for(j = 0; j < b_read; j++) {
-                    writebyte(input[j]);
-                }
+            Serial.printf("bytes avail: %d\n", b_avail);
+                
+            if (total_bytes + b_avail > MAX_PACKET) {
+                b_avail = MAX_PACKET - total_bytes;
             }
+
+            b_read = client.read((uint8_t *)cptr, b_avail);
+            
+            cptr += b_read;
+            total_bytes += b_read;
         }
 
         // close the connection:
         client.stop();
         Serial.println("[Client disconnected]");
+                
+        Serial.printf("total bytes: %d\n", total_bytes);
+        for(j = 0; j < total_bytes; j++) {
+            if (j % 200 == 0) {
+                yield();
+            }
+            writebyte(input[j]);
+        }
     }
 }
 

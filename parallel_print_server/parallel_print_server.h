@@ -1,7 +1,7 @@
 #ifndef PARALLEL_PRINT_SERVER_H
 #define PARALLEL_PRINT_SERVER_H
 
-#define MAX_PACKET 5000
+#define MAX_PACKET 10000
 
 bool checkConnection();
 bool attemptConnection();
