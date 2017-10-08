@@ -18,78 +18,86 @@ WiFiServer server(PORT);
 WiFiClient serverClients[MAX_SRV_CLIENTS];
 
 
-void setupServer() {
-
-    Serial.print("\nConnecting to "); 
-    Serial.println(ssid);
+bool checkConnection() {
     
+    bool res = false;
+
+    if (WiFi.status() == WL_CONNECTED) {
+        res = true;
+    }
+    
+    return res;
+}
+
+
+bool attemptConnection() {
+
+    bool res;
+    res = true;    
+
+    server.stop();
+
+    Serial.printf("Connecting to %s\n", ssid); 
+    WiFi.disconnect(); 
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
-    
+
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
     }
     Serial.println("");
     Serial.println("connected");
- 
+    
     if (!MDNS.begin("esp8266")) {
         Serial.println("Error setting up MDNS responder!");
-        while(1) { 
-            delay(1000);
-        }
     }
-    Serial.println("mDNS responder started");
-    
-    MDNS.addService("printer", "tcp", 9100); 
+    else {
+        Serial.println("mDNS responder started");
+        MDNS.addService("printer", "tcp", 9100); 
+    }
     
     server.begin();
     //server.setNoDelay(true);
     server.setNoDelay(false);
   
-    Serial.print("Ready! IP:");
-    Serial.println(WiFi.localIP());
-    Serial.print("Port: ");
-    Serial.println(PORT);
+    Serial.printf("Ready! ADDR: %s:%d\n", 
+        WiFi.localIP().toString().c_str(), 
+        PORT
+    );
+    
+    return res;
 }
 
 
 void loopServer() {
     
-    int bavail = 0;
-    int j = 0;
-    char * input = 0;
+    int b_avail = 0, j = 0, b_read = 0;
+    static char input[MAX_PACKET];
     WiFiClient client;
+
+    if (checkConnection == false) {
+        while (attemptConnection() == false);
+    }
 
     client = server.available();    
     if (client)
     {
-    
-        Serial.println("\n[Client connected]");
+        Serial.println("[Client connected]");
         while (client.connected())
         {
-            bavail = client.available();
+            b_avail = client.available();
 
             // read line by line what the client (web browser) is requesting
-            if (bavail)
+            if (b_avail > 0)
             {
-                Serial.print("available: ");
-                Serial.println(bavail);
-                //Serial.println("data:");
-                input = (char *) malloc(bavail);
- 
-                for(j = 0; j<bavail; j++) {
-                    input[j] = client.read();
-                    //Serial.print(input[j], HEX);
-                    //Serial.print(" ");
-                }
-                //Serial.println("");
-            
-                for(j = 0; j < bavail; j++) {
+                memset(input, 0, MAX_PACKET);
+                Serial.printf("bytes available: %d\n", b_avail);
+                b_read = client.read((uint8_t *)input, b_avail);
+                Serial.printf("bytes read: %d\n", b_read);
+                for(j = 0; j < b_read; j++) {
                     writebyte(input[j]);
                 }
-
-                free(input);
             }
         }
 
@@ -97,19 +105,6 @@ void loopServer() {
         client.stop();
         Serial.println("[Client disconnected]");
     }
-}
-
-
-void setup()
-{
-    Serial.begin(115200);
-    
-    // Start the printer and the serial port
-    delay(2000);
-    Serial.println("\n\r\n\nBOOT");
-
-    setupServer();
-    setup_parport();
 }
 
 
@@ -139,8 +134,19 @@ void test_loop() {
             Serial.println("Line finished!");  
         }
     }
+}
 
 
+void setup()
+{
+    Serial.begin(115200);
+    
+    // Start the printer and the serial port
+    delay(2000);
+    Serial.println("\n\nBOOT");
+
+    setup_parport();
+    attemptConnection();
 }
 
 
@@ -148,5 +154,4 @@ void loop()
 {
     loopServer(); 
     //test_loop();
-    
 }

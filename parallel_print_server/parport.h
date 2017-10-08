@@ -11,9 +11,15 @@
 //#define BUSY_TIMEOUT 2 //ms
 //#define SHR_DELAY 4 //us
 
-#define DELAY_CLK 6 //us
+//delay shift reg
+#define DELAY_CLK 4 //us
 #define BUSY_TIMEOUT 2 //ms
-#define SHR_DELAY 6 //us
+#define SHR_DELAY 4 //us
+
+
+//delay parport
+#define DELAY_PAR_STROBE 8 //us
+#define DELAY_STROBE_LOW 2 //us
 
 
 //shift register

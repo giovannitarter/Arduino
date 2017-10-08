@@ -47,7 +47,7 @@ void writebyte(uint8_t character) {
     digitalWrite(STROBE_PIN, HIGH);
     
     writeshr(character);
-    delayMicroseconds(8);
+    delayMicroseconds(DELAY_PAR_STROBE);
 
     stime = millis();
     while(digitalRead(BUSY_PIN) == HIGH) {
@@ -60,9 +60,9 @@ void writebyte(uint8_t character) {
     }
 
     digitalWrite(STROBE_PIN, LOW);
-    delayMicroseconds(2);
+    delayMicroseconds(DELAY_STROBE_LOW);
     digitalWrite(STROBE_PIN, HIGH);
-    delayMicroseconds(8);
+    delayMicroseconds(DELAY_PAR_STROBE);
 
     stime = millis();
     while(digitalRead(BUSY_PIN) == HIGH) {
