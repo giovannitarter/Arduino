@@ -39,7 +39,7 @@
 #endif
 
 
-#define MAX_PAYLOAD 4
+#define MAX_PAYLOAD 200
 #define SWITCH_ON "ON"
 #define SWITCH_OFF "OFF"
 

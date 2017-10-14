@@ -350,7 +350,7 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
         else {
             snprintf(err, 50, 
             "wrong message \"%s\" on topic \"%s\"",
-            payload, 
+            payloadStr, 
             topic);
             Serial.println(err);
         }
@@ -366,7 +366,7 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
       else {
         snprintf(err, 50, 
         "wrong message \"%s\" on topic \"%s\"",
-        payload, 
+        payloadStr, 
         topic);
         Serial.println(err);
       }
@@ -392,9 +392,11 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
     
     else if (strcmp(topic, cfg_topic) == 0) {
       Serial.println("Cfg Topic");
-      reset_config();
-      Serial.println("Reset");
-      ESP.restart();
+      Serial.printf("%s\n", payloadStr);
+      //reset_config();
+      merge_config(payloadStr);
+      //Serial.println("Reset");
+      //ESP.restart();
     }
     
     else {

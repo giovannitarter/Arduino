@@ -52,5 +52,6 @@ bool loadConfig(thermoCfg *);
 void writeConfig(thermoCfg *);
 void dump_cfg_file();
 bool verify_config();
+bool merge_config(char newcfg[]);
 
 #endif

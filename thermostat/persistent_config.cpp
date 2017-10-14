@@ -149,7 +149,7 @@ bool loadConfig(thermoCfg * tcfg) {
     }
     
     aJsonObject * srvp = aJson.getObjectItem(root, "SRVP");    
-    if (srv) {
+    if (srvp) {
         tmpcfg.port = srvp->valueint;
         Serial.printf("lcfg: SRVP: %d\n", tmpcfg.port);
     }
@@ -279,4 +279,78 @@ void setup_config(thermoCfg * tcfg, char name[]) {
         Serial.println("SPIFFS begin fail!");
     }
     Serial.println("setup config RETURN\n");
+}
+
+
+bool merge_config(char * newcfg ) {
+
+    thermoCfg tmpcfg;
+    aJsonObject * root;
+
+    root = aJson.parse(newcfg);    
+    if (root == NULL) {
+        Serial.println("JSON parsing failed");
+        return false;
+    }
+    
+    loadConfig(&tmpcfg);
+
+    aJsonObject * name = aJson.getObjectItem(root, "NAME");    
+    if (name) {
+        strncpy(tmpcfg.name, name->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: NAME: %s\n", tmpcfg.name);
+    }
+    
+    aJsonObject * srv = aJson.getObjectItem(root, "SRV");    
+    if (srv) {
+        strncpy(tmpcfg.server, srv->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: SRV: %s\n", tmpcfg.server);
+    }
+    
+    aJsonObject * srvp = aJson.getObjectItem(root, "SRVP");    
+    if (srvp) {
+        tmpcfg.port = srvp->valueint;
+        Serial.printf("mcfg: SRVP: %d\n", tmpcfg.port);
+    }
+    
+    aJsonObject * otasrv = aJson.getObjectItem(root, "OTASRV");    
+    if (otasrv) {
+        strncpy(tmpcfg.otaserver, srv->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: OTASRV: %s\n", tmpcfg.otaserver);
+    }
+    
+    aJsonObject * otaport = aJson.getObjectItem(root, "OTASRVP");    
+    if (otaport) {
+        tmpcfg.otaport = otaport->valueint;
+        Serial.printf("mcfg: OTASRVP: %d\n", tmpcfg.otaport);
+    }
+    
+    aJsonObject * essid = aJson.getObjectItem(root, "ESSID");    
+    if (essid) {
+        strncpy(tmpcfg.essid, essid->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: ESSID: %s\n", tmpcfg.essid);
+    }
+    
+    aJsonObject * pass = aJson.getObjectItem(root, "PASS");    
+    if (pass) {
+        strncpy(tmpcfg.pass, pass->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: PASS: %s\n", tmpcfg.pass);
+    }
+    
+    aJsonObject * sens_type = aJson.getObjectItem(root, "SENS");    
+    if (sens_type) {
+        tmpcfg.sens_type = sens_type->valueint;
+        Serial.printf("mcfg: SENS: %d\n", tmpcfg.sens_type);
+    }
+    
+    aJsonObject * note = aJson.getObjectItem(root, "NOTE");    
+    if (note) {
+        strncpy(tmpcfg.note, note->valuestring, MAX_ADDR);
+        Serial.printf("mcfg: NOTE: %s\n", tmpcfg.note);
+    }
+    
+    aJson.deleteItem(root);
+    writeConfig(&tmpcfg);
+
+    return true;
 }
