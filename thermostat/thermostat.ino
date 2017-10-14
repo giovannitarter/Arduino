@@ -296,7 +296,7 @@ void sendRelaysStatus() {
 
     DEBUG_SERIAL("sendRelaysStatus start");
 
-    client.publish(availSwitch0Topic, "OFF");  
+    client.publish(availSwitch0Topic, "ON");  
     client.publish(availSwitch1Topic, "ON");  
     
     if (getPinState(RELAY0)) {
