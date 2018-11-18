@@ -38,4 +38,3 @@ void clearPin(uint8_t pin) {
     
     digitalWrite(pin, LOW);
 }
-

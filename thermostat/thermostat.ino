@@ -38,7 +38,7 @@ char cfg_topic[MAX_TOPIC];
 
 char discoveryTopic[] = "espdiscovery";
 char resetTopic[] = "espreset";
-
+char hass_status[] = "hass/status";
 
 long lastMsg = 0;
 char msg[50];
@@ -297,20 +297,26 @@ void sendRelaysStatus() {
     DEBUG_SERIAL("sendRelaysStatus start");
 
     client.publish(availSwitch0Topic, "ON");  
+    client.loop();
     client.publish(availSwitch1Topic, "ON");  
+    client.loop();
     
     if (getPinState(RELAY0)) {
         client.publish(outSwitch0Topic, "ON");  
+        client.loop();
     }
     else {
       client.publish(outSwitch0Topic, "OFF");
+      client.loop();
     }
 
     if (getPinState(RELAY1)) {
         client.publish(outSwitch1Topic, "ON");  
+        client.loop();
     }
     else {
       client.publish(outSwitch1Topic, "OFF");
+      client.loop();
     }
     
     DEBUG_SERIAL("sendRelaysStatus end");
@@ -398,7 +404,12 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
       //Serial.println("Reset");
       //ESP.restart();
     }
-    
+    //else if (strcmp(topic, hass_status) == 0) {
+    //    Serial.println("Hass Online");
+    //    if (strstr(payloadStr, "online")) {
+    //        fireDiscovery = 1;
+    //    }
+    //}
     else {
       snprintf(err, 50, "wrong topic \"%s\"", topic);
       Serial.println(err);
@@ -511,6 +522,7 @@ void reconnect () {
             client.subscribe(inSwitch1Topic);
             client.subscribe(resetTopic);
             client.subscribe(cfg_topic);
+            client.subscribe(hass_status);
            
             Serial.println("> MQTT processing pending messages");
             for (i=0; i<5; i++) {
@@ -710,5 +722,3 @@ void initTopics() {
     snprintf(cfg_topic, MAX_TOPIC, temp_cfg_topic, tcfg.name);
     Serial.println(cfg_topic);
 }
-
-
