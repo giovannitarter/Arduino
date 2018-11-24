@@ -404,12 +404,12 @@ void callback(char * topic, unsigned char * payload, unsigned int length) {
       //Serial.println("Reset");
       //ESP.restart();
     }
-    //else if (strcmp(topic, hass_status) == 0) {
-    //    Serial.println("Hass Online");
-    //    if (strstr(payloadStr, "online")) {
-    //        fireDiscovery = 1;
-    //    }
-    //}
+    else if (strcmp(topic, hass_status) == 0) {
+        Serial.println("Hass Online");
+        if (strstr(payloadStr, "online")) {
+            fireDiscovery = 1;
+        }
+    }
     else {
       snprintf(err, 50, "wrong topic \"%s\"", topic);
       Serial.println(err);
