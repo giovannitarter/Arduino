@@ -18,7 +18,7 @@ class HidData {
     private:
         bool _calibrate_osc = false;
         bool _optimalize_osc = false;
-        
+
     public:
         HidData (void);
         
@@ -28,6 +28,13 @@ class HidData {
         
         void begin(bool calibrate_osc = false);
         void loop(void);
+		
+        void setReadCallback(uchar (*hidReadCallback)(uchar *data, uchar len));
+        void setWriteCallback(uchar (*hidWriteCallback)(uchar *data, uchar len));
+		
+        uchar (*_hidReadCallback)(uchar *data, uchar len); 
+		uchar (*_hidWriteCallback)(uchar *data, uchar len); 
+        
         //void refresh();
         //void read(uchar *data, uchar len);
         

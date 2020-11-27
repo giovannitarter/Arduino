@@ -30,9 +30,16 @@ PROGMEM const char usbHidReportDescriptor[22] = {    /* USB report descriptor */
  * opaque data bytes.
  */
 
+
+
+HidData * _VUsbHid;
+
+
 /* The following variables store the status of the current data transfer */
-static uchar    currentAddress;
-static uchar    bytesRemaining;
+static uchar currentAddress;
+static uchar bytesRemaining;
+static uchar buff[128];
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,29 +49,53 @@ extern "C" {
 /* usbFunctionRead() is called when the host requests a chunk of data from
  * the device. For more information see the documentation in usbdrv/usbdrv.h.
  */
-uchar   usbFunctionRead(uchar *data, uchar len)
+uchar usbFunctionRead(uchar *data, uchar len)
 {
-    if(len > bytesRemaining)
+    
+    if (bytesRemaining == 128) {
+        _VUsbHid->_hidReadCallback(buff, 128);
+    }
+
+    if (len > bytesRemaining) {
         len = bytesRemaining;
-    eeprom_read_block(data, (uchar *)0 + currentAddress, len);
+    }
+    
+    memcpy(data, &buff[currentAddress], len);
+
     currentAddress += len;
     bytesRemaining -= len;
+
     return len;
 }
 
 /* usbFunctionWrite() is called when the host sends a chunk of data to the
  * device. For more information see the documentation in usbdrv/usbdrv.h.
  */
-uchar   usbFunctionWrite(uchar *data, uchar len)
+uchar usbFunctionWrite(uchar *data, uchar len)
 {
-    if(bytesRemaining == 0)
+
+    if (bytesRemaining <= 0 || len == 0) {
+        _VUsbHid->_hidWriteCallback(buff, currentAddress);
         return 1;               /* end of transfer */
-    if(len > bytesRemaining)
+    }
+    
+    if (len > bytesRemaining) {
         len = bytesRemaining;
-    eeprom_write_block(data, (uchar *)0 + currentAddress, len);
+    }
+    
+    memcpy(&buff[currentAddress], data, len);
+    
     currentAddress += len;
     bytesRemaining -= len;
-    return bytesRemaining == 0; /* return 1 if this was the last chunk */
+
+    if (bytesRemaining <= 0) {
+        _VUsbHid->_hidWriteCallback(buff, currentAddress);
+        /* return 1 if this was the last chunk */
+        return 1;
+    }
+    else {
+        return 0;
+    }
 }
 
 
@@ -78,18 +109,22 @@ uchar   usbFunctionWrite(uchar *data, uchar len)
 
 usbMsgLen_t usbFunctionSetup(uchar data[8])
 {
-usbRequest_t    *rq = (void *)data;
+    
+    usbRequest_t    *rq = (void *)data;
+    
 
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* HID class request */
         if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
             /* since we have only one report type, we can ignore the report-ID */
             bytesRemaining = 128;
             currentAddress = 0;
+            memset(buff, 0, 128);
             return USB_NO_MSG;  /* use usbFunctionRead() to obtain data */
         }else if(rq->bRequest == USBRQ_HID_SET_REPORT){
             /* since we have only one report type, we can ignore the report-ID */
             bytesRemaining = 128;
             currentAddress = 0;
+            memset(buff, 0, 128);
             return USB_NO_MSG;  /* use usbFunctionWrite() to receive data from host */
         }
     }else{
@@ -101,13 +136,14 @@ usbRequest_t    *rq = (void *)data;
 
 HidData::HidData() {
 
+    _VUsbHid = this;
     _optimalize_osc = false;
     _calibrate_osc = false;
 }
 
 
 void HidData::begin(bool cal_osc) {
-    
+
     uchar   i;
     _calibrate_osc = cal_osc;
 
@@ -138,6 +174,15 @@ void HidData::loop() {
     wdt_reset();
     usbPoll();
 }
+        
+
+void HidData::setReadCallback(uchar (*hidReadCallback)(uchar *data, uchar len)) {
+    _hidReadCallback = hidReadCallback;
+}
 
 
-HidData VUsbHid = HidData();
+void HidData::setWriteCallback(uchar (*hidWriteCallback)(uchar *data, uchar len)) {
+    _hidWriteCallback = hidWriteCallback;
+}
+
+
