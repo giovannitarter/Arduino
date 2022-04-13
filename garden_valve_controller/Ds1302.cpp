@@ -74,14 +74,14 @@ void Ds1302::getDateTime(struct tm * dt)
 void Ds1302::setDateTime(struct tm * dt)
 {
 
-    Serial.print("min ");
-    Serial.println(dt->tm_min);
+    //Serial.print("min ");
+    //Serial.println(dt->tm_min);
 
-    Serial.print("hour ");
-    Serial.println(dt->tm_hour);
+    //Serial.print("hour ");
+    //Serial.println(dt->tm_hour);
 
-    Serial.print("year ");
-    Serial.println(dt->tm_year);
+    //Serial.print("year ");
+    //Serial.println(dt->tm_year);
 
     _prepareWrite(REG_WP);
     _writeByte(0b00000000);

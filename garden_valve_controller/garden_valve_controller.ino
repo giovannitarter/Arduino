@@ -14,7 +14,7 @@
 #define PIN_H_A2 2  //D4
 
 
-#define TIME_MIN 1649751185
+#define TIME_MIN 1649800000
 
 #ifndef STASSID
 #define STASSID ""
@@ -51,15 +51,21 @@ void printTm(const char* what, const tm* tm) {
 //Callback called when NTP acquires time
 void time_is_set(bool from_sntp) {
 
+  time_t now;
   Serial.print("time is set - ");
   Serial.println(from_sntp);
 
   if (from_sntp) {
-    Serial.println("Writing time to rtc");
-
-    time_t now = time(nullptr);
+    
+    now = time(nullptr);
     rtc_set_time(now);
-
+    
+    Serial.print("Writing time to rtc: ");
+    Serial.println(now);
+    
+    now = rtc_get_time();
+    Serial.print("Verify: ");
+    Serial.println(now);
   }
 }
 
@@ -94,7 +100,7 @@ time_t rtc_get_time() {
 }
 
 
-void set_time_boot() {
+void set_time_boot(int config) {
 
     uint8_t need_sync;
     time_t rtc_time, now;
@@ -110,7 +116,7 @@ void set_time_boot() {
     //Serial.print("rtc_status: ");
     //Serial.println(rtc_status);
 
-    need_sync = rtc_time < TIME_MIN;
+    need_sync = rtc_time < TIME_MIN || config;
 
     Serial.print("need_sync: ");
     Serial.println(need_sync);
@@ -151,9 +157,19 @@ void set_time_boot() {
 
 void setup() {
 
+    //digitalWrite(PIN_H_A1, LOW);
+    pinMode(PIN_H_A1, INPUT);
+    
+    int config;
+
     delay(2000);
+    config = digitalRead(PIN_H_A1);
+
     Serial.begin(115200);
     Serial.println("\n\nBOOT");
+    
+    Serial.print("config: ");
+    Serial.println(config);
 
     pinMode(PIN_SU, OUTPUT);
     pinMode(PIN_STBY, OUTPUT);
@@ -169,61 +185,72 @@ void setup() {
 
     rtc.init();
 
-    Serial.println("CANE");
-
-    set_time_boot();
+    set_time_boot(config);
+    Serial.println("EndConfig");
 }
 
 
-// the loop function runs over and over again forever
 void loop() {
 
-    //ESP.deepSleep(10e6);
 
     time_t now = time(nullptr);
     Serial.print("time:");
     Serial.println((unsigned int)now);
+    
+    struct tm * tmp;
+    tmp = localtime(&now);
+    printTm("localtime:", tmp);
+    Serial.println();
+    free(tmp);
 
-    delay(10000);
-    return;
+    Serial.println("Waiting");
+    ESP.deepSleep(10e6);
+}
 
-  Serial.println("");
-  Serial.print("LOOP -: dir: ");
-  Serial.println(dir);
 
-  if (dir) {
-    dir = 0;
-  }
-  else {
-    dir = 1;
-  }
-
-  digitalWrite(PIN_SU, HIGH);
-
-  Serial.println("Charging...");
-  delay(5000);
-  Serial.println("Charged!");
-
-  if (dir) {
+void open_valve() {
+    
+    digitalWrite(PIN_SU, HIGH);
+    
+    Serial.println("Charging...");
+    delay(5000);
+    Serial.println("Charged!");
+      
     digitalWrite(PIN_H_A1, HIGH);
     digitalWrite(PIN_H_A2, LOW);
-  }
-  else {
+    
+    Serial.println("Activation");
+    digitalWrite(PIN_STBY, HIGH);
+    delay(75);
+    Serial.println("Stop");
+    
+    digitalWrite(PIN_STBY, LOW);
+    digitalWrite(PIN_SU, LOW);
+    digitalWrite(PIN_H_A1, LOW);
+    digitalWrite(PIN_H_A2, LOW);
+
+}
+
+
+void close_valve() {
+    
+    digitalWrite(PIN_SU, HIGH);
+    
+    Serial.println("Charging...");
+    delay(5000);
+    Serial.println("Charged!");
+      
     digitalWrite(PIN_H_A1, LOW);
     digitalWrite(PIN_H_A2, HIGH);
-  }
-
-  Serial.println("Activation");
-  digitalWrite(PIN_STBY, HIGH);
-  delay(75);
-  Serial.println("Stop");
-
-  digitalWrite(PIN_STBY, LOW);
-  digitalWrite(PIN_SU, LOW);
-  digitalWrite(PIN_H_A1, LOW);
-  digitalWrite(PIN_H_A2, LOW);
-
-  Serial.println("Waiting");
-  delay(10000);
+    
+    Serial.println("Activation");
+    digitalWrite(PIN_STBY, HIGH);
+    delay(75);
+    Serial.println("Stop");
+    
+    digitalWrite(PIN_STBY, LOW);
+    digitalWrite(PIN_SU, LOW);
+    digitalWrite(PIN_H_A1, LOW);
+    digitalWrite(PIN_H_A2, LOW);
 
 }
