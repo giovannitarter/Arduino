@@ -48,14 +48,17 @@ class Ds1302
          */
         void setDateTime(struct tm * dt);
 
+        void writeRam(uint8_t address, uint8_t value);
+        void readRam(uint8_t address, uint8_t * value);
+
     private:
 
         uint8_t _pin_ena;
         uint8_t _pin_clk;
         uint8_t _pin_dat;
 
-        void _prepareRead(uint8_t address);
-        void _prepareWrite(uint8_t address);
+        void _prepareRead(uint8_t address, uint8_t clock);
+        void _prepareWrite(uint8_t address, uint8_t clock);
         void _end();
 
         int _dat_direction;

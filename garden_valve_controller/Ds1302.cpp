@@ -46,7 +46,7 @@ void Ds1302::init()
 
 bool Ds1302::isHalted()
 {
-    _prepareRead(REG_SECONDS);
+    _prepareRead(REG_SECONDS, 1);
     uint8_t seconds = _readByte();
     _end();
     return (seconds & 0b10000000);
@@ -55,14 +55,14 @@ bool Ds1302::isHalted()
 
 void Ds1302::getDateTime(struct tm * dt)
 {
-    _prepareRead(REG_BURST);
+    _prepareRead(REG_BURST, 1);
     dt->tm_sec  = _bcd2dec(_readByte() & 0b01111111);
     dt->tm_min  = _bcd2dec(_readByte() & 0b01111111);
     dt->tm_hour = _bcd2dec(_readByte() & 0b00111111);
     dt->tm_mday = _bcd2dec(_readByte() & 0b00111111);
     dt->tm_mon  = _bcd2dec(_readByte() & 0b00011111);
                   _bcd2dec(_readByte() & 0b00000111);
-    dt->tm_year = _bcd2dec(_readByte() & 0b01111111) + 2000;
+    dt->tm_year = _bcd2dec(_readByte() & 0b01111111) + 100;
     _end();
 
     dt->tm_isdst = 0;
@@ -73,21 +73,11 @@ void Ds1302::getDateTime(struct tm * dt)
 
 void Ds1302::setDateTime(struct tm * dt)
 {
-
-    //Serial.print("min ");
-    //Serial.println(dt->tm_min);
-
-    //Serial.print("hour ");
-    //Serial.println(dt->tm_hour);
-
-    //Serial.print("year ");
-    //Serial.println(dt->tm_year);
-
-    _prepareWrite(REG_WP);
+    _prepareWrite(REG_WP, 1);
     _writeByte(0b00000000);
     _end();
 
-    _prepareWrite(REG_BURST);
+    _prepareWrite(REG_BURST, 1);
     _writeByte(_dec2bcd(dt->tm_sec  % 60 ));
     _writeByte(_dec2bcd(dt->tm_min  % 60 ));
     _writeByte(_dec2bcd(dt->tm_hour % 24 ));
@@ -98,32 +88,74 @@ void Ds1302::setDateTime(struct tm * dt)
     _writeByte(0b10000000);
     _end();
 }
+        
+void Ds1302::writeRam(uint8_t address, uint8_t value) {
+   
+    address <<= 1;
+    address &= 0b00111110;
+
+    _prepareWrite(REG_WP, 1);
+    _writeByte(0b00000000);
+    _end();
+    
+    _prepareWrite(address, 0);
+    _writeByte(value);
+    _end();
+}
+
+
+void Ds1302::readRam(uint8_t address, uint8_t * value) {
+    
+    address <<= 1;
+    address &= 0b00111110;
+    
+    _prepareRead(address, 0);
+    *value = _readByte();
+    _end();
+}
 
 
 void Ds1302::halt()
 {
-    _prepareWrite(REG_SECONDS);
+    _prepareWrite(REG_SECONDS, 1);
     _writeByte(0b10000000);
     _end();
 }
 
 
-void Ds1302::_prepareRead(uint8_t address)
+void Ds1302::_prepareRead(uint8_t address, uint8_t clock)
 {
+    uint8_t command;
+    if (clock) {
+        command = 0b10000001;
+    }
+    else {
+        command = 0b11000001;
+    }
     _setDirection(OUTPUT);
     digitalWrite(_pin_ena, HIGH);
-    uint8_t command = 0b10000001 | address;
+    command |= address;
     _writeByte(command);
     _setDirection(INPUT);
+    
 }
 
 
-void Ds1302::_prepareWrite(uint8_t address)
+void Ds1302::_prepareWrite(uint8_t address, uint8_t clock)
 {
+    uint8_t command;
+    if (clock) {
+        command = 0b10000000;
+    }
+    else {
+        command = 0b11000000;
+    }
+    
     _setDirection(OUTPUT);
     digitalWrite(_pin_ena, HIGH);
-    uint8_t command = 0b10000000 | address;
+    command |= address;
     _writeByte(command);
+    
 }
 
 
