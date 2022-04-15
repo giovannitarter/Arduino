@@ -1,6 +1,8 @@
 #include <ESP8266WiFi.h>
 #include <coredecls.h>
 #include <sntp.h>
+
+#include "garden_valve_controller.h"
 #include "Ds1302.h"
 #include "weekly_calendar.h"
 
@@ -23,15 +25,11 @@
 #define TIME_MIN 1640995200
 
 #define ADDR_CNT 0x01
-#define SLEEP_MAX 20
 
 #define ADDR_CHECK 0x02
 #define VAL_CHECK 0b0101010101
 
 #define ADDR_NEXTOP 0x03
-#define OP_SKIP 0x10
-#define OP_OPEN 0x11
-#define OP_CLOSE 0x12
 
 #ifndef STASSID
 #define STASSID ""
@@ -44,25 +42,11 @@ int dir;
 #define TZ "CET-1CEST,M3.5.0/2,M10.5.0/3"
 
 Ds1302 rtc = Ds1302(PIN_CE, PIN_CLK, PIN_DIO);
+WeeklyCalendar wk = WeeklyCalendar(MAX_ENTRIES);
 
 
 time_t now;
 struct tm tm_now;
-
-
-
-
-#define PTM(w) \
-  Serial.print(" " #w "="); \
-  Serial.print(tm->tm_##w);
-
-void printTm(const char* what, const tm* tm) {
-  Serial.print(what);
-  PTM(isdst); PTM(yday); PTM(wday);
-  PTM(year);  PTM(mon);  PTM(mday);
-  PTM(hour);  PTM(min);  PTM(sec);
-  Serial.println("");
-}
 
 
 //Callback called when NTP acquires time
@@ -165,7 +149,7 @@ void set_time_boot(int config) {
         Serial.println("Error on RTC, sync from the internet");
 
         now = time(nullptr);
-        printTm("localtime:", localtime(&now));
+        wk.print_time_t("localtime:", now, 0);
         Serial.println();
 
         WiFi.mode(WIFI_STA);
@@ -247,67 +231,6 @@ void open_valve() {
 }
 
 
-ws_entry schedule[MAX_ENTRIES];
-time_t on_events[MAX_ENTRIES];
-time_t off_events[MAX_ENTRIES];
-int events_nr;
-
-void parse_schedule() {
-    
-    events_nr = 0;
-
-    memset(schedule, 0, sizeof(ws_entry) * MAX_ENTRIES);
-    
-    //next monday at 11.40
-    //schedule[0].day_of_week = 1;
-    //schedule[0].start_time = (11*60 + 40);
-    
-    schedule[0].enabled = 1;
-    schedule[0].day_of_week = EVERYDAY;
-    schedule[0].start_time = (5*60 + 2);
-    schedule[0].duration = 2;
- 
-    now = time(nullptr);
-    Serial.printf("curr time: %d\n\r", (unsigned int)now);
-
-    for (int i=0; i<MAX_ENTRIES; i++) {
-        if (schedule[i].enabled) {
-            on_events[i] = next_occurrence_start(&schedule[i], now);
-            off_events[i] = next_occurrence_end(&schedule[i], now);
-            events_nr++;
-        }
-    }
-        
-    //printf("\n\r");
-    //next = next_occurrence(&schedule[0], now + (i * SECS_PER_WEEK));
-    //Serial.printf("next: %d\n\r", (unsigned int)next);
-    //
-    //localtime_r(&next, &tm_now);
-    //printTm("occurence", &tm_now);
-    
-    Serial.printf("events_nr: %d\n\r", events_nr);
-}
-
-
-void next_event(time_t * time, uint8_t * is_on) {
-
-    *time = UINT_MAX;
-
-    for(int i=0; i<events_nr; i++) {
-        
-        if (on_events[i] < *time) {
-            *time = on_events[i];
-            *is_on = 1;
-
-        }
-        if (off_events[i] < *time) {
-            *time = off_events[i];
-            *is_on = 0;
-        }
-    }
-}
-
-
 void setup() {
     
     pinMode(PIN_SU, OUTPUT);
@@ -346,19 +269,13 @@ void setup() {
     dir = 0;
 
     set_time_boot(config);
-    parse_schedule();
+    wk.parse_schedule();
 
     Serial.println("end setup\n");
 }
 
 
 void loop() {
-
-    //Serial.println("LOOP");
-    //open_valve();
-    //delay(5000);
-    //close_valve();
-    //delay(5000);
 
     now = time(nullptr);
     Serial.print("UTC time from system:  ");
@@ -368,26 +285,27 @@ void loop() {
     now = rtc_get_time();
     Serial.println((unsigned int)now);
 
-    localtime_r(&now, &tm_now);
-    printTm("localtime from system:", &tm_now);
+    wk.print_time_t("localtime from system: ", now, 0);
 
-    time_t next;
-    uint8_t is_on;
+    time_t next, last, sleeptime;
+    uint8_t last_op, next_op, curr_op;
     struct tm next_tm;
 
     Serial.println("");
-    next_event(&next, &is_on);
-    Serial.printf("next: %d\n\r", (unsigned int)next);
+    wk.next_event(now, &last, &next, &last_op, &next_op);
 
-    localtime_r(&next, &next_tm);
-    printTm("next_event (localtime):", &next_tm);
-    Serial.printf("is_on: %d\n\r", is_on);
-    
-    
-    uint8_t next_op, curr_op;
-    unsigned int sleeptime;
-    
-    rtc.readRam(ADDR_NEXTOP, &curr_op);
+    Serial.printf("next_op: %X\n\r", next_op);
+    Serial.printf("last_op: %X\n\r", last_op);
+   
+    if (now - last < EVT_TOLERANCE) {
+        curr_op = last_op;
+    }
+    else if (next - now < EVT_TOLERANCE) {
+        curr_op = next_op;
+    }
+    else {
+        curr_op = OP_SKIP;
+    }
     
     switch (curr_op) {
         
@@ -395,10 +313,12 @@ void loop() {
             break;
 
         case OP_OPEN:
+            Serial.println("Time to open");
             open_valve();
             break;
 
         case OP_CLOSE:
+            Serial.println("Time to close");
             close_valve();
             break;
 
@@ -407,26 +327,17 @@ void loop() {
 
     }
 
-    if (is_on) {
-        next_op = OP_OPEN;
-    }
-    else {
-        next_op = OP_CLOSE;
-    }
-
+    now = time(nullptr);
     sleeptime = (unsigned int)next-now; 
     
     if (sleeptime > SLEEP_MAX) {
         sleeptime = SLEEP_MAX;
-        next_op = OP_SKIP;
     }
-        
-    rtc.writeRam(ADDR_NEXTOP, next_op);
+    //rtc.writeRam(ADDR_NEXTOP, next_op);
     
     Serial.printf("Will sleep for: %d\n\r", sleeptime);
     sleeptime = sleeptime * 1e6;
 
     ESP.deepSleep(sleeptime);
 }
-
 
