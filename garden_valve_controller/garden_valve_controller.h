@@ -1,6 +1,7 @@
 #ifndef __GVC_GDEFINES__
 #define __GVC_GDEFINES__
 
+#define BOOT_DELAY 2
 #define EVT_TOLERANCE 10
 #define SLEEP_MAX 20
 

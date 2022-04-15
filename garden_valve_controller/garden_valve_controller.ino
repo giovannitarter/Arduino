@@ -247,7 +247,7 @@ void setup() {
 
     int config = 0;
 
-    delay(2000);
+    delay(BOOT_DELAY * 1e3);
 
     //digitalWrite(PIN_H_A1, LOW);
     //pinMode(PIN_H_A1, INPUT);
@@ -294,14 +294,16 @@ void loop() {
     Serial.println("");
     wk.next_event(now, &last, &next, &last_op, &next_op);
 
-    Serial.printf("next_op: %X\n\r", next_op);
-    Serial.printf("last_op: %X\n\r", last_op);
+    //Serial.printf("next_op: %X\n\r", next_op);
+    //Serial.printf("last_op: %X\n\r", last_op);
    
     if (now - last < EVT_TOLERANCE) {
         curr_op = last_op;
+        Serial.printf("Executing last_op: %X\n\r", curr_op);
     }
     else if (next - now < EVT_TOLERANCE) {
         curr_op = next_op;
+        Serial.printf("Executing next_op: %X\n\r", curr_op);
     }
     else {
         curr_op = OP_SKIP;
@@ -333,11 +335,18 @@ void loop() {
     if (sleeptime > SLEEP_MAX) {
         sleeptime = SLEEP_MAX;
     }
+    else if (sleeptime < EVT_TOLERANCE && curr_op != OP_SKIP) {
+        sleeptime = EVT_TOLERANCE;
+    }
     //rtc.writeRam(ADDR_NEXTOP, next_op);
-    
-    Serial.printf("Will sleep for: %d\n\r", sleeptime);
-    sleeptime = sleeptime * 1e6;
+   
+    if (curr_op != OP_SKIP) { 
+        sleeptime -= BOOT_DELAY;
+    }
 
+    Serial.printf("Will sleep for: %d\n\r", sleeptime);
+    
+    sleeptime = sleeptime * 1e6;
     ESP.deepSleep(sleeptime);
 }
 

@@ -26,7 +26,7 @@ void WeeklyCalendar::parse_schedule() {
     
     schedule[0].enabled = 1;
     schedule[0].day_of_week = EVERYDAY;
-    schedule[0].start_time = (14*60 + 15);
+    schedule[0].start_time = (18*60 + 30);
     schedule[0].duration = 1;
     events_nr++;
   
