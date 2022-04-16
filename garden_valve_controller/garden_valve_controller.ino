@@ -5,6 +5,7 @@
 #include "garden_valve_controller.h"
 #include "Ds1302.h"
 #include "weekly_calendar.h"
+#include "solenoid_driver.h"
 
 //D1 GPIO5
 //D2 GPIO4
@@ -38,11 +39,13 @@
 
 //Globals
 int dir;
+const int VALVE_DELAY = BOOT_DELAY + CAP_CHARGE_TIME + SOLENOID_PULSE_TIME;
 
 #define TZ "CET-1CEST,M3.5.0/2,M10.5.0/3"
 
 Ds1302 rtc = Ds1302(PIN_CE, PIN_CLK, PIN_DIO);
 WeeklyCalendar wk = WeeklyCalendar(MAX_ENTRIES);
+SolenoidDriver soldrv = SolenoidDriver();
 
 
 time_t now;
@@ -179,75 +182,22 @@ void set_time_boot(int config) {
 }
 
 
-void close_valve() {
-
-    pinMode(PIN_H_A1, OUTPUT);
-    pinMode(PIN_H_A2, OUTPUT);
-    digitalWrite(PIN_SU, HIGH);
-
-    Serial.println("Charging...");
-    delay(5000);
-    Serial.println("Charged!");
-
-    digitalWrite(PIN_H_A1, HIGH);
-    digitalWrite(PIN_H_A2, LOW);
-
-    Serial.println("Activation");
-    digitalWrite(PIN_STBY, HIGH);
-    delay(75);
-    Serial.println("Stop");
-
-    digitalWrite(PIN_STBY, LOW);
-    digitalWrite(PIN_SU, LOW);
-    digitalWrite(PIN_H_A1, LOW);
-    digitalWrite(PIN_H_A2, LOW);
-
-}
-
-
-void open_valve() {
-
-    pinMode(PIN_H_A1, OUTPUT);
-    pinMode(PIN_H_A2, OUTPUT);
-    digitalWrite(PIN_SU, HIGH);
-
-    Serial.println("Charging...");
-    delay(5000);
-    Serial.println("Charged!");
-
-    digitalWrite(PIN_H_A1, LOW);
-    digitalWrite(PIN_H_A2, HIGH);
-
-    Serial.println("Activation");
-    digitalWrite(PIN_STBY, HIGH);
-    delay(75);
-    Serial.println("Stop");
-
-    digitalWrite(PIN_STBY, LOW);
-    digitalWrite(PIN_SU, LOW);
-    digitalWrite(PIN_H_A1, LOW);
-    digitalWrite(PIN_H_A2, LOW);
-
-}
 
 
 void setup() {
     
     pinMode(PIN_SU, OUTPUT);
     pinMode(PIN_STBY, OUTPUT);
-    //pinMode(PIN_H_A1, OUTPUT);
-    //pinMode(PIN_H_A2, OUTPUT);
 
     digitalWrite(PIN_SU, LOW);
     digitalWrite(PIN_STBY, LOW);
-    //digitalWrite(PIN_H_A1, LOW);
-    //digitalWrite(PIN_H_A2, LOW);
     
     rtc.init();
+    soldrv.init(PIN_SU, PIN_STBY, PIN_H_A1, PIN_H_A2);
 
     int config = 0;
 
-    delay(BOOT_DELAY * 1e3);
+    delay(BOOT_DELAY);
 
     //digitalWrite(PIN_H_A1, LOW);
     //pinMode(PIN_H_A1, INPUT);
@@ -316,12 +266,12 @@ void loop() {
 
         case OP_OPEN:
             Serial.println("Time to open");
-            open_valve();
+            soldrv.open_valve();
             break;
 
         case OP_CLOSE:
             Serial.println("Time to close");
-            close_valve();
+            soldrv.close_valve();
             break;
 
         default:
@@ -330,18 +280,20 @@ void loop() {
     }
 
     now = time(nullptr);
-    sleeptime = (unsigned int)next-now; 
+    sleeptime = (unsigned int)next - now; 
     
+    //sleep at most SLEEP_MAX seconds 
     if (sleeptime > SLEEP_MAX) {
         sleeptime = SLEEP_MAX;
     }
-    else if (sleeptime < EVT_TOLERANCE && curr_op != OP_SKIP) {
-        sleeptime = EVT_TOLERANCE;
+    else if (sleeptime > VALVE_DELAY) {
+        
+        //next time the micro wakes up, there will be an action to perform,
+        //adjust for VALVE_DELAY
+        sleeptime -= VALVE_DELAY;
     }
-    //rtc.writeRam(ADDR_NEXTOP, next_op);
-   
-    if (curr_op != OP_SKIP) { 
-        sleeptime -= BOOT_DELAY;
+    else if (sleeptime < EVT_TOLERANCE) {
+        sleeptime = EVT_TOLERANCE;
     }
 
     Serial.printf("Will sleep for: %d\n\r", sleeptime);
