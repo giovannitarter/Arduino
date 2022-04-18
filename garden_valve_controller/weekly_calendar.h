@@ -11,34 +11,17 @@
 #define THU_TO_SUN 3
 
 
-//weekly schedule descriptr
-struct ws_entry {
-    
-    uint8_t version;
-    uint8_t enabled;
-
-    //sunday = 0
-    uint8_t day_of_week;
-
-    //in minutes since midnight
-    uint16_t start_time;
-
-    //in minutes
-    uint16_t duration;
-};
-typedef struct ws_entry ws_entry;
-
-
 class WeeklyCalendar {
         
     public:
-        WeeklyCalendar(uint8_t entries);
+        WeeklyCalendar();
         void parse_schedule();
         
-        uint8_t next_event(
+        uint8_t next_event_r(
                 time_t ctime, 
-                time_t *last, time_t *next, 
-                uint8_t *last_op, uint8_t *next_op
+                time_t last_executed, 
+                uint8_t *op,
+                time_t * sleeptime
                 );
         
         void print_time_tm(char * text, struct tm * prt_time);
@@ -46,14 +29,9 @@ class WeeklyCalendar {
 
     private:
         
-        ws_entry schedule[MAX_ENTRIES];
-        
-        int events_nr;
-        
         time_t _last_occurrence(time_t offset, time_t time, time_t period);
-        time_t _get_period(ws_entry * wse);
-        time_t _get_offset(ws_entry * wse);
-        
+        time_t _get_period(uint8_t wday);
+        time_t _get_offset(uint8_t wday, time_t time);
 };
 
 

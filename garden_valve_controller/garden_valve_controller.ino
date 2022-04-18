@@ -44,7 +44,7 @@ const int VALVE_DELAY = BOOT_DELAY + CAP_CHARGE_TIME + SOLENOID_PULSE_TIME;
 #define TZ "CET-1CEST,M3.5.0/2,M10.5.0/3"
 
 Ds1302 rtc = Ds1302(PIN_CE, PIN_CLK, PIN_DIO);
-WeeklyCalendar wk = WeeklyCalendar(MAX_ENTRIES);
+WeeklyCalendar wk = WeeklyCalendar();
 SolenoidDriver soldrv = SolenoidDriver();
 
 
@@ -242,22 +242,8 @@ void loop() {
     struct tm next_tm;
 
     Serial.println("");
-    wk.next_event(now, &last, &next, &last_op, &next_op);
+    wk.next_event_r(now, 0, &curr_op, &sleeptime);
 
-    //Serial.printf("next_op: %X\n\r", next_op);
-    //Serial.printf("last_op: %X\n\r", last_op);
-   
-    if (now - last < EVT_TOLERANCE) {
-        curr_op = last_op;
-        Serial.printf("Executing last_op: %X\n\r", curr_op);
-    }
-    else if (next - now < EVT_TOLERANCE) {
-        curr_op = next_op;
-        Serial.printf("Executing next_op: %X\n\r", curr_op);
-    }
-    else {
-        curr_op = OP_SKIP;
-    }
     
     switch (curr_op) {
         
@@ -279,25 +265,8 @@ void loop() {
 
     }
 
-    now = time(nullptr);
-    sleeptime = (unsigned int)next - now; 
-    
-    //sleep at most SLEEP_MAX seconds 
-    if (sleeptime > SLEEP_MAX) {
-        sleeptime = SLEEP_MAX;
-    }
-    else if (sleeptime > VALVE_DELAY) {
-        
-        //next time the micro wakes up, there will be an action to perform,
-        //adjust for VALVE_DELAY
-        sleeptime -= VALVE_DELAY;
-    }
-    else if (sleeptime < EVT_TOLERANCE) {
-        sleeptime = EVT_TOLERANCE;
-    }
 
-    Serial.printf("Will sleep for: %d\n\r", sleeptime);
-    
+    Serial.printf("Will sleep for: %d\n\r", sleeptime); 
     sleeptime = sleeptime * 1e6;
     ESP.deepSleep(sleeptime);
 }
