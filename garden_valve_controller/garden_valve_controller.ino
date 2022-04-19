@@ -1,6 +1,9 @@
 #include <ESP8266WiFi.h>
 #include <coredecls.h>
 #include <sntp.h>
+#include "LittleFS.h"
+
+#include "pb_encode.h"
 
 #include "garden_valve_controller.h"
 #include "Ds1302.h"
@@ -182,6 +185,23 @@ void set_time_boot(int config) {
 }
 
 
+void write_schedule(File * f) {
+    
+    bool status;
+    size_t len;
+    Schedule msg;
+    uint8_t buffer[128];
+
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+    msg.version = 1;
+    status = pb_encode(&stream, Schedule_fields, &msg);
+    len = stream.bytes_written;
+
+    Serial.printf("write len: %d\n", len);
+    
+    f->write((char *)buffer, len);
+}
+
 
 
 void setup() {
@@ -219,7 +239,17 @@ void setup() {
     dir = 0;
 
     set_time_boot(config);
-    wk.parse_schedule();
+
+    LittleFS.begin();
+    if (! LittleFS.exists("/schedule.txt")) {
+        
+        Serial.println("Writing schedule");
+        
+        File f = LittleFS.open("schedule.txt", "w");
+        write_schedule(&f);
+        f.close();
+    }
+    LittleFS.end();
 
     Serial.println("end setup\n");
 }

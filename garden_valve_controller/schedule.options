@@ -1,1 +1,2 @@
-Schedule.events  type:FT_CALLBACK, callback_datatype:"uint8_t"
+Schedule.events  type:FT_CALLBACK, callback_datatype:"void *"
+

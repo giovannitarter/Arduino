@@ -1,6 +1,7 @@
 #ifndef __GVC_WEEKLY_CALENDAR
 #define __GVC_WEEKLY_CALENDAR
 
+#include "schedule.pb.h"
 
 #define STRUCT_VERSION 0x01
 #define EVERYDAY 7
@@ -8,6 +9,7 @@
 #define SECS_PER_WEEK 604800
 #define SECS_PER_DAY 86400
 #define SECS_PER_MIN 60
+#define SECS_PER_HOU 3600
 #define THU_TO_SUN 3
 
 
@@ -23,15 +25,21 @@ class WeeklyCalendar {
                 uint8_t *op,
                 time_t * sleeptime
                 );
+
+        uint8_t add_event(ScheduleEntry * ent);
         
         void print_time_tm(char * text, struct tm * prt_time);
         void print_time_t(char * text, time_t t, uint8_t utc);
 
     private:
         
+        time_t _ctime, _next;
+        uint8_t _next_op;
+
         time_t _last_occurrence(time_t offset, time_t time, time_t period);
         time_t _get_period(uint8_t wday);
         time_t _get_offset(uint8_t wday, time_t time);
+
 };
 
 

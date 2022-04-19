@@ -1,21 +1,26 @@
 #include <ESP8266WiFi.h>
 #include <time.h>
 #include <cstdio>
+#include "LittleFS.h"
 
 #include "pb_encode.h"
 #include "pb_decode.h"
+
+#include "weekly_calendar.h"
 #include "schedule.pb.h"
 
 #include "garden_valve_controller.h"
-#include "weekly_calendar.h"
 
 
 bool Schedule_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t * field) {
 
     ScheduleEntry ent;
+    WeeklyCalendar * wkp;
 
     if (ostream && !istream) {
         PB_UNUSED(istream);
+
+        wkp = (WeeklyCalendar *) field->pData;
 
         if (field->tag == Schedule_events_tag) {
             ent = {
@@ -61,11 +66,15 @@ bool Schedule_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_fi
     else if(istream && !ostream) {
 
         PB_UNUSED(ostream);
+        
+        wkp = (WeeklyCalendar *) field->pData;
+        
         if (field->tag == Schedule_events_tag) {
             
             if (!pb_decode(istream, ScheduleEntry_fields, &ent))
                 return false;
 
+            wkp->add_event(&ent);
             Serial.printf("evt at %d:%d op: %d\n\r", ent.start_hou, ent.start_min, ent.op);
         }
     }
@@ -79,25 +88,32 @@ WeeklyCalendar::WeeklyCalendar() {
 }
 
 
-void WeeklyCalendar::parse_schedule() {
+
+
+uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
     
-    bool status;
-    size_t len;
-    Schedule msg;
-    // = Schedule_init_zero;
+    time_t time, period, offset, tmp;
+    
+    time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
-    uint8_t buffer[128];
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+    Serial.printf("Add event: %d\n\r", time);
 
-    msg.version = 1;
+    period = _get_period(ent->wday);
+    offset = _get_offset(ent->wday, time);
+    
+    //last event
+    tmp = _last_occurrence(offset, _ctime, period);
 
-    status = pb_encode(&stream, Schedule_fields, &msg);
-    len = stream.bytes_written;
+    //next event
+    tmp += period;
 
-    pb_istream_t istream;
-    istream = pb_istream_from_buffer(buffer, len);
-    status = pb_decode(&istream, Schedule_fields, &msg);
-}
+    if (tmp < _next) {
+        _next = tmp;
+        _next_op = ent->op;
+    }
+
+    return 0;   
+};
 
 
 uint8_t WeeklyCalendar::next_event_r(
@@ -108,38 +124,46 @@ uint8_t WeeklyCalendar::next_event_r(
         )
 {
 
+    uint8_t buffer[128];
     time_t tmp, next, period, offset;
+    size_t len;
+    
+    len = 0;
+
+    LittleFS.begin();
+    if (LittleFS.exists("/schedule.txt")) {
+        
+        File f = LittleFS.open("schedule.txt", "r");
+
+        len = f.size();
+        f.readBytes((char *)buffer, len);
+
+        f.close();
+    }
+    LittleFS.end();
+
+    Serial.printf("read %d bytes\n\r", len);
 
     //performing all actions between (time + EVT_TOLERANCE) and (ctime + EVT_TOLERANCE)
     *op = OP_SKIP;
-    next = ctime + EVT_TOLERANCE;
-    ctime = ctime - EVT_TOLERANCE;
+    
+    _ctime = ctime - EVT_TOLERANCE;
+    //_next = ctime + EVT_TOLERANCE;
+    _next = UINT_MAX;
+    _next_op = OP_SKIP;
     
     Serial.printf("ref time: %d\n\r", (unsigned int)ctime);
-
-    //for (int i=0; i<events_nr; i++) {
-    //    
-    //    Serial.println("");
-    //    
-    //    if (schedule[i].enabled) {
-
-    //        period = _get_period(&schedule[i]);
-    //        offset = _get_offset(&schedule[i]);
-    //        
-    //        //last event
-    //        tmp = _last_occurrence(offset, ctime, period);
-
-    //        //next event
-    //        tmp += period;
-    //        
-    //        if (tmp < *next) {
-    //            *next = tmp;
-    //            *op = schedule[i].op;
-    //        }
-    //    }
-    //}
     
-    
+    Schedule msg; 
+    pb_istream_t istream;
+    uint8_t status;
+
+    istream = pb_istream_from_buffer(buffer, len);
+    msg.events = (void *) this;
+    status = pb_decode(&istream, Schedule_fields, &msg);
+
+    print_time_t("next_op: ", _next, 0);
+
     //now = time(nullptr);
     //sleeptime = (unsigned int)next - now; 
     //
