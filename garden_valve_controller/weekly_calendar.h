@@ -13,28 +13,38 @@
 #define THU_TO_SUN 3
 
 
+#define MAX_EVENTS 10
+
+typedef struct event {
+    time_t time;
+    uint8_t action;
+} event_t;
+
+
 class WeeklyCalendar {
-        
+
     public:
         WeeklyCalendar();
         void parse_schedule();
-        
-        uint8_t next_event_r(
-                time_t ctime, 
-                time_t last_executed, 
+
+        uint8_t init(time_t ctime);
+        uint8_t next_event(
                 uint8_t *op,
-                time_t * sleeptime
+                uint32_t * sleeptime
                 );
 
         uint8_t add_event(ScheduleEntry * ent);
-        
+
         void print_time_tm(char * text, struct tm * prt_time);
         void print_time_t(char * text, time_t t, uint8_t utc);
 
+        time_t _ctime;
+
     private:
-        
-        time_t _ctime, _next;
-        uint8_t _next_op;
+
+        uint8_t _ev_next, _ev_nr;
+        event_t _events[MAX_EVENTS];
+        uint8_t _next_exec;
 
         time_t _last_occurrence(time_t offset, time_t time, time_t period);
         time_t _get_period(uint8_t wday);

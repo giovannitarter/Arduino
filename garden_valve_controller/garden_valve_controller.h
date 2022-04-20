@@ -9,8 +9,9 @@
 #define EVT_TOLERANCE 10 //sec
 #define SLEEP_MAX 20 //sec
 
-#define OP_SKIP 0x10
-#define OP_OPEN 0x11
+#define OP_NONE  0x00
+#define OP_SKIP  0x10
+#define OP_OPEN  0x11
 #define OP_CLOSE 0x12
 
 

@@ -2,8 +2,9 @@
 #include <coredecls.h>
 #include <sntp.h>
 #include "LittleFS.h"
+#include <ESP8266HTTPClient.h>
 
-#include "pb_encode.h"
+//#include "pb_encode.h"
 
 #include "garden_valve_controller.h"
 #include "Ds1302.h"
@@ -145,6 +146,7 @@ void set_time_boot(int config) {
     //Serial.print("rtc_status: ");
     //Serial.println(rtc_status);
 
+    //config = 1;
     need_sync = rtc_time < TIME_MIN || config;
 
     Serial.print("need_sync: ");
@@ -175,6 +177,45 @@ void set_time_boot(int config) {
         Serial.println("WiFi connected");
         Serial.println("IP address: ");
         Serial.println(WiFi.localIP());
+
+
+        WiFiClient client;
+        HTTPClient http;
+        http.begin(client, "http://192.168.2.25:25000/getschedule");
+        
+        int httpCode = http.GET();
+        if (httpCode == HTTP_CODE_OK) {
+            //Serial.println(http.getSize());
+          
+            LittleFS.begin();
+            File f = LittleFS.open("/schedule.txt", "w");
+            uint8_t buff[20] = { 0 };
+            int len = http.getSize();
+
+            while (http.connected() && (len > 0 || len == -1)) {
+                // read up to 128 byte
+                int c = client.readBytes(buff, std::min((size_t)len, sizeof(buff)));
+
+                // write it to Serial
+                f.write(buff, c);
+
+                if (len > 0) { 
+                    len -= c; 
+                }
+            }
+            f.close();
+            LittleFS.end();
+        
+            //f = LittleFS.open("/schedule.txt", "r");
+            //for(int i=0; i<f.size(); i++) {
+            //    Serial.printf("%02X ", (uint8_t)f.read());
+            //}
+            //Serial.printf("\n\r");
+            //f.close();
+
+        
+        }
+        http.end();
     }
     else {
         Serial.println("RTC is ok, setting time to system clock");
@@ -185,33 +226,87 @@ void set_time_boot(int config) {
 }
 
 
-void write_schedule(File * f) {
-    
-    bool status;
-    size_t len;
-    Schedule msg;
-    uint8_t buffer[128];
+//void write_schedule(File * f) {
+//
+//    bool status;
+//    size_t len;
+//    Schedule msg;
+//    uint8_t buffer[128];
+//
+//    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+//    msg.version = 1;
+//    msg.events.funcs.encode = &enc_callback;
+//    msg.events.arg = nullptr;
+//
+//    status = pb_encode(&stream, Schedule_fields, &msg);
+//    len = stream.bytes_written;
+//
+//    Serial.printf("write len: %d\n\r", len);
+//
+//    f->write((char *)buffer, len);
+//}
 
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-    msg.version = 1;
-    status = pb_encode(&stream, Schedule_fields, &msg);
-    len = stream.bytes_written;
 
-    Serial.printf("write len: %d\n", len);
-    
-    f->write((char *)buffer, len);
-}
+//bool enc_callback(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg) {
+//
+//    ScheduleEntry ent;
+//
+//    if (field->tag == Schedule_events_tag) {
+//        ent = {
+//            true,
+//            true,
+//            true,
+//            WeekDay_EVR,
+//            true,
+//            Operation_OP_OPEN,
+//            true,
+//            16,
+//            true,
+//            33
+//        };
+//
+//        if (!pb_encode_tag_for_field(stream, field))
+//            return false;
+//
+//        if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
+//            return false;
+//
+//        ent = {
+//            true,
+//            true,
+//            true,
+//            WeekDay_EVR,
+//            true,
+//            Operation_OP_CLOSE,
+//            true,
+//            16,
+//            true,
+//            34
+//        };
+//
+//        if (!pb_encode_tag_for_field(stream, field))
+//            return false;
+//
+//        if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
+//            return false;
+//
+//    }
+//
+//    return true;
+//}
+
+
 
 
 
 void setup() {
-    
+
     pinMode(PIN_SU, OUTPUT);
     pinMode(PIN_STBY, OUTPUT);
 
     digitalWrite(PIN_SU, LOW);
     digitalWrite(PIN_STBY, LOW);
-    
+
     rtc.init();
     soldrv.init(PIN_SU, PIN_STBY, PIN_H_A1, PIN_H_A2);
 
@@ -240,16 +335,17 @@ void setup() {
 
     set_time_boot(config);
 
-    LittleFS.begin();
-    if (! LittleFS.exists("/schedule.txt")) {
-        
-        Serial.println("Writing schedule");
-        
-        File f = LittleFS.open("schedule.txt", "w");
-        write_schedule(&f);
-        f.close();
-    }
-    LittleFS.end();
+    //LittleFS.begin();
+    //if (true) {
+    ////if (! LittleFS.exists("/schedule.txt")) {
+
+    //    Serial.println("Writing schedule");
+
+    //    File f = LittleFS.open("schedule.txt", "w");
+    //    write_schedule(&f);
+    //    f.close();
+    //}
+    //LittleFS.end();
 
     Serial.println("end setup\n");
 }
@@ -267,36 +363,55 @@ void loop() {
 
     wk.print_time_t("localtime from system: ", now, 0);
 
-    time_t next, last, sleeptime;
-    uint8_t last_op, next_op, curr_op;
-    struct tm next_tm;
+    uint32_t sleeptime;
+    uint8_t op;
 
     Serial.println("");
-    wk.next_event_r(now, 0, &curr_op, &sleeptime);
 
-    
-    switch (curr_op) {
-        
-        case OP_SKIP:
-            break;
+    sleeptime = 0;
 
-        case OP_OPEN:
-            Serial.println("Time to open");
-            soldrv.open_valve();
-            break;
+    //while(1) {
+    //    
+    //    Serial.println("Time to open");
+    //    soldrv.open_valve();
+    //    delay(5000);
+    //    
+    //    Serial.println("Time to close");
+    //    soldrv.close_valve();
+    //    delay(5000);
+ 
+    //}
 
-        case OP_CLOSE:
-            Serial.println("Time to close");
-            soldrv.close_valve();
-            break;
 
-        default:
-            break;
+    wk.init(now);
 
+    while(sleeptime == 0) {
+
+        wk.next_event(&op, &sleeptime);
+
+        switch (op) {
+
+            case OP_SKIP:
+                break;
+
+            case OP_OPEN:
+                Serial.println("Time to open");
+                soldrv.open_valve();
+                break;
+
+            case OP_CLOSE:
+                Serial.println("Time to close");
+                soldrv.close_valve();
+                break;
+
+            default:
+                break;
+
+        }
     }
 
-
-    Serial.printf("Will sleep for: %d\n\r", sleeptime); 
+    Serial.println("All action performed.");
+    Serial.printf("Will sleep for: %d\n\r", sleeptime);
     sleeptime = sleeptime * 1e6;
     ESP.deepSleep(sleeptime);
 }

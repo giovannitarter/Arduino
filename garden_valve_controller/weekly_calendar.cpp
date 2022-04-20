@@ -12,128 +12,92 @@
 #include "garden_valve_controller.h"
 
 
-bool Schedule_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t * field) {
+bool dec_callback(pb_istream_t *istream, const pb_field_iter_t *field, void **arg) {
 
+    WeeklyCalendar * wk = (WeeklyCalendar *) *arg;
     ScheduleEntry ent;
-    WeeklyCalendar * wkp;
 
-    if (ostream && !istream) {
-        PB_UNUSED(istream);
+    if (field->tag == Schedule_events_tag) {
 
-        wkp = (WeeklyCalendar *) field->pData;
+        if (!pb_decode(istream, ScheduleEntry_fields, &ent))
+            return false;
 
-        if (field->tag == Schedule_events_tag) {
-            ent = {
-                true,
-                true,
-                true,
-                WeekDay_EVR,
-                true,
-                Operation_OP_OPEN,
-                true,
-                7,
-                true,
-                0
-            };
-            
-            if (!pb_encode_tag_for_field(ostream, field))
-                return false;
-            
-            if (!pb_encode_submessage(ostream, ScheduleEntry_fields, &ent))
-                return false;
-            
-            ent = {
-                true,
-                true,
-                true,
-                WeekDay_EVR,
-                true,
-                Operation_OP_CLOSE,
-                true,
-                7,
-                true,
-                2
-            };
-            
-            if (!pb_encode_tag_for_field(ostream, field))
-                return false;
-            
-            if (!pb_encode_submessage(ostream, ScheduleEntry_fields, &ent))
-                return false;
-
-        }
+        wk->add_event(&ent);
     }
-    else if(istream && !ostream) {
-
-        PB_UNUSED(ostream);
-        
-        wkp = (WeeklyCalendar *) field->pData;
-        
-        if (field->tag == Schedule_events_tag) {
-            
-            if (!pb_decode(istream, ScheduleEntry_fields, &ent))
-                return false;
-
-            wkp->add_event(&ent);
-            Serial.printf("evt at %d:%d op: %d\n\r", ent.start_hou, ent.start_min, ent.op);
-        }
-    }
-
     return true;
 }
 
 
 WeeklyCalendar::WeeklyCalendar() {
-
 }
 
 
-
-
 uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
-    
-    time_t time, period, offset, tmp;
-    
-    time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
-    Serial.printf("Add event: %d\n\r", time);
+    time_t time, period, offset, tmp;
+
+    time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
     period = _get_period(ent->wday);
     offset = _get_offset(ent->wday, time);
-    
+
     //last event
     tmp = _last_occurrence(offset, _ctime, period);
 
     //next event
     tmp += period;
 
-    if (tmp < _next) {
-        _next = tmp;
-        _next_op = ent->op;
+    //print_time_t("next_occurrence: ", tmp, 1);
+    //
+    uint8_t action;
+
+    switch (ent->op) {
+        
+        case Operation_OP_OPEN:
+           action = OP_OPEN;
+           break;
+        
+        case Operation_OP_CLOSE:
+           action = OP_CLOSE;
+           break;
+        
+        case Operation_OP_SKIP:
+           action = OP_SKIP;
+           break;
+
+        default:
+           action = OP_NONE;
+
     }
 
-    return 0;   
+    _events[_ev_next].time = tmp;
+    _events[_ev_next].action = action;
+    _ev_next = (_ev_next + 1) % MAX_EVENTS;
+    _ev_nr++;
+
+    return 0;
 };
 
 
-uint8_t WeeklyCalendar::next_event_r(
-        time_t ctime, 
-        time_t last_executed, 
-        uint8_t * op,
-        time_t * sleeptime
-        )
-{
+int compar(const void * a, const void * b) {
+    return (((event_t *)a)->time - ((event_t *)b)->time);
+}
 
-    uint8_t buffer[128];
-    time_t tmp, next, period, offset;
-    size_t len;
+
+uint8_t WeeklyCalendar::init(time_t ctime) {
     
-    len = 0;
+    uint8_t buffer[128];
+    size_t len;
+    uint8_t res = 0;
 
+    _ctime = ctime - EVT_TOLERANCE;
+    _next_exec = 0;
+
+    len = 0;
     LittleFS.begin();
     if (LittleFS.exists("/schedule.txt")) {
-        
-        File f = LittleFS.open("schedule.txt", "r");
+
+        File f = LittleFS.open("/schedule.txt", "r");
 
         len = f.size();
         f.readBytes((char *)buffer, len);
@@ -144,57 +108,90 @@ uint8_t WeeklyCalendar::next_event_r(
 
     Serial.printf("read %d bytes\n\r", len);
 
-    //performing all actions between (time + EVT_TOLERANCE) and (ctime + EVT_TOLERANCE)
-    *op = OP_SKIP;
-    
-    _ctime = ctime - EVT_TOLERANCE;
-    //_next = ctime + EVT_TOLERANCE;
-    _next = UINT_MAX;
-    _next_op = OP_SKIP;
-    
+    _ev_next = 0;
+    for(int i=0; i<MAX_EVENTS; i++) {
+        _events[i].time = UINT_MAX;
+        _events[i].action = OP_NONE;
+    }
+
     Serial.printf("ref time: %d\n\r", (unsigned int)ctime);
-    
-    Schedule msg; 
+
+    Schedule msg;
     pb_istream_t istream;
     uint8_t status;
 
+    msg.events.funcs.decode = &dec_callback;
+    msg.events.arg = (void *) this;
     istream = pb_istream_from_buffer(buffer, len);
-    msg.events = (void *) this;
     status = pb_decode(&istream, Schedule_fields, &msg);
 
-    print_time_t("next_op: ", _next, 0);
+    qsort(_events, _ev_nr, sizeof(event_t), &compar);
 
-    //now = time(nullptr);
-    //sleeptime = (unsigned int)next - now; 
-    //
-    ////sleep at most SLEEP_MAX seconds 
-    //if (sleeptime > SLEEP_MAX) {
-    //    sleeptime = SLEEP_MAX;
-    //}
-    //else if (sleeptime > VALVE_DELAY) {
-    //    
-    //    //next time the micro wakes up, there will be an action to perform,
-    //    //adjust for VALVE_DELAY
-    //    sleeptime -= VALVE_DELAY;
-    //}
-    //else if (sleeptime < EVT_TOLERANCE) {
-    //    sleeptime = EVT_TOLERANCE;
-    //}
-    
+    for(int i=0; i<_ev_nr; i++) {
+        Serial.printf("%d -> action: %X ", i, _events[i].action);
+        print_time_t("time: ", _events[i].time, 0);
+    }
     return 0;
 }
 
 
+uint8_t WeeklyCalendar::next_event(
+        uint8_t * op,
+        uint32_t * sleeptime
+        )
+{
+
+    uint8_t res = 0;
+    time_t next, now;
+    
+    *op = OP_NONE;
+
+    next = _events[_next_exec].time;
+    if (next < _ctime + 2 * EVT_TOLERANCE) 
+    {
+        *op = _events[_next_exec].action;
+        *sleeptime = 0;
+        _next_exec++;
+        
+        Serial.printf("Performing action %d ", *op);
+        print_time_t("scheduled at: ", _events[_next_exec].time, 0);
+    }
+    else {
+        now = time(nullptr);
+        *sleeptime = (unsigned int)next - (unsigned int)now;
+
+        Serial.println(next);
+        Serial.println(now);
+        Serial.println((unsigned int)*sleeptime);
+
+        if (*sleeptime > BOOT_DELAY) 
+            *sleeptime -= BOOT_DELAY;
+    
+        //if (*sleeptime < EVT_TOLERANCE) {
+        //    Serial.printf("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
+        //    *sleeptime = EVT_TOLERANCE;
+        //}
+        
+        if (*sleeptime > SLEEP_MAX) {
+            *sleeptime = SLEEP_MAX;
+        }
+    }
+    
+
+    return res;
+}
+
+
 time_t WeeklyCalendar::_last_occurrence(time_t offset, time_t time, time_t period) {
-    
+
     time_t res;
-    
+
     //first we compute the occurence since thursday 00:00
     res = offset;
-    
+
     //last_occurrence
     res = time - ((time - res) % period);
-    
+
     return res;
 }
 
@@ -210,13 +207,13 @@ time_t WeeklyCalendar::_get_offset(uint8_t wday, time_t time) {
 
     time_t offset;
     offset = 0;
-    
+
     if (wday != WeekDay_EVR) {
         offset += (wday + THU_TO_SUN) * SECS_PER_DAY;
     }
-    
+
     offset += time;
-    
+
     return offset;
 }
 
@@ -224,7 +221,7 @@ time_t WeeklyCalendar::_get_offset(uint8_t wday, time_t time) {
 time_t WeeklyCalendar::_get_period(uint8_t wday) {
 
     time_t period;
-    
+
     if (wday != WeekDay_EVR) {
         period = SECS_PER_WEEK;
     }

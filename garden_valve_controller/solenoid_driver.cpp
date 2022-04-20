@@ -8,17 +8,17 @@ SolenoidDriver::SolenoidDriver() {
 
 
 void SolenoidDriver::init(
-    uint8_t pin_step_up, 
-    uint8_t pin_stby,
-    uint8_t pin_h1,
-    uint8_t pin_h2
+    uint8_t pin_step_up_p, 
+    uint8_t pin_stby_p,
+    uint8_t pin_h1_p,
+    uint8_t pin_h2_p
 ) 
 {
 
-    pin_su = pin_step_up;
-    pin_stby = pin_stby;
-    pin_h1 = pin_h1;
-    pin_h2 = pin_h2;
+    pin_su = pin_step_up_p;
+    pin_stby = pin_stby_p;
+    pin_h1 = pin_h1_p;
+    pin_h2 = pin_h2_p;
 }
 
 
