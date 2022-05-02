@@ -1,16 +1,12 @@
-#include <time.h>
 #include <cstdio>
-#include <stdlib.h>
-#include <stdarg.h>
+#include <ctime>
+#include <cstdlib>
+#include <cstdarg>
 
-
-#include "pb_encode.h"
-#include "pb_decode.h"
+#include <pb_decode.h>
 
 #include "weekly_calendar.h"
 #include "schedule.pb.h"
-
-#include "garden_valve_controller.h"
 
 
 bool dec_callback(pb_istream_t *istream, const pb_field_iter_t *field, void **arg) {
@@ -50,7 +46,7 @@ uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
 
     //print_time_t("next_occurrence: ", tmp, 1);
     //
-
+    
     _events[_ev_next].time = tmp;
     _events[_ev_next].action = ent->op;
     _ev_next = (_ev_next + 1) % MAX_EVENTS;
@@ -132,24 +128,23 @@ uint8_t WeeklyCalendar::next_event(
         print_time_t("scheduled at: ", _events[_next_exec].time, 0);
     }
     else {
-        now = time(nullptr);
         *sleeptime = (unsigned int)next - (unsigned int)now;
 
         _write_log("%d\n", next);
         _write_log("%d\n", now);
         _write_log("%d\n", (unsigned int)*sleeptime);
 
-        if (*sleeptime > BOOT_DELAY) 
-            *sleeptime -= BOOT_DELAY;
+        //if (*sleeptime > BOOT_DELAY) 
+        //    *sleeptime -= BOOT_DELAY;
     
-        //if (*sleeptime < EVT_TOLERANCE) {
-        //    Serial.printf("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
-        //    *sleeptime = EVT_TOLERANCE;
+        ////if (*sleeptime < EVT_TOLERANCE) {
+        ////    _write_log("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
+        ////    *sleeptime = EVT_TOLERANCE;
+        ////}
+        //
+        //if (*sleeptime > SLEEP_MAX) {
+        //    *sleeptime = SLEEP_MAX;
         //}
-        
-        if (*sleeptime > SLEEP_MAX) {
-            *sleeptime = SLEEP_MAX;
-        }
     }
     
 
@@ -240,4 +235,7 @@ void WeeklyCalendar::_write_log(const char *format, ...)
     vprintf(format, args);
     va_end(args);
 }
+
+
+
 
