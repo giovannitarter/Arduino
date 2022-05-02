@@ -9,7 +9,9 @@
  *
  */
 
-#include <ESP8266WiFi.h>
+#include <Arduino.h>
+#include <ctime>
+
 #include "Ds1302.h"
 
 

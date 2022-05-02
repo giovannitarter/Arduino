@@ -1,31 +1,27 @@
-#include <ESP8266WiFi.h>
-#include <coredecls.h>
+#include <Arduino.h>
+#include <LittleFS.h>
+#include <WiFi.h>
 #include <sntp.h>
-#include "LittleFS.h"
-#include <ESP8266HTTPClient.h>
-
-//#include "pb_encode.h"
+#include <ctime>
+#include <HTTPClient.h>
 
 #include "garden_valve_controller.h"
 #include "Ds1302.h"
 #include "weekly_calendar.h"
 #include "solenoid_driver.h"
 
-//D1 GPIO5
-//D2 GPIO4
-//D5 GPIO14
-//D6 GPIO12
-//D7 GPIO13
+#define PIN_CLK 21
+#define PIN_DIO 22
+#define PIN_CE  2
 
-#define PIN_CLK 5
-#define PIN_DIO 4
-#define PIN_CE  13
+#define PIN_SU   16
+#define PIN_STBY 4 
 
-#define PIN_SU   14 //D5
-#define PIN_STBY 12 //D6
+#define PIN_H_A1 21
+#define PIN_H_A2 22
 
-#define PIN_H_A1 5  //D1
-#define PIN_H_A2 4  //D2
+#define PIN_LED_CONFIG 23
+#define PIN_CONFIG 34
 
 #define TIME_MIN 1640995200
 
@@ -50,6 +46,10 @@ const int VALVE_DELAY = BOOT_DELAY + CAP_CHARGE_TIME + SOLENOID_PULSE_TIME;
 Ds1302 rtc = Ds1302(PIN_CE, PIN_CLK, PIN_DIO);
 WeeklyCalendar wk = WeeklyCalendar();
 SolenoidDriver soldrv = SolenoidDriver();
+
+#define SCHEDULE_MAXLEN 256
+uint8_t buffer[SCHEDULE_MAXLEN];
+size_t buflen;
 
 
 time_t now;
@@ -125,8 +125,9 @@ void set_time_boot(int config) {
 
     uint8_t need_sync;
     time_t rtc_time, now;
+    struct tm now_tm;
 
-    settimeofday_cb(time_is_set);
+    //settimeofday_cb(time_is_set);
 
     configTime(0, 0, "pool.ntp.org");
     setenv("TZ", TZ, 3);
@@ -142,11 +143,6 @@ void set_time_boot(int config) {
     Serial.print("rtc_time: ");
     Serial.println((unsigned int)rtc_time);
 
-    //rtc_status = rtc_failed();
-    //Serial.print("rtc_status: ");
-    //Serial.println(rtc_status);
-
-    //config = 1;
     need_sync = rtc_time < TIME_MIN || config;
 
     Serial.print("need_sync: ");
@@ -178,6 +174,10 @@ void set_time_boot(int config) {
         Serial.println("IP address: ");
         Serial.println(WiFi.localIP());
 
+        configTime(0, 0, "pool.ntp.org");
+        getLocalTime(&now_tm);
+        wk.print_time_tm("localtime: ", &now_tm);
+        time_is_set(true);
 
         WiFiClient client;
         HTTPClient http;
@@ -187,7 +187,7 @@ void set_time_boot(int config) {
         if (httpCode == HTTP_CODE_OK) {
             //Serial.println(http.getSize());
           
-            LittleFS.begin();
+            LittleFS.begin(true);
             File f = LittleFS.open("/schedule.txt", "w");
             uint8_t buff[20] = { 0 };
             int len = http.getSize();
@@ -205,104 +205,68 @@ void set_time_boot(int config) {
             }
             f.close();
             LittleFS.end();
-        
-            //f = LittleFS.open("/schedule.txt", "r");
-            //for(int i=0; i<f.size(); i++) {
-            //    Serial.printf("%02X ", (uint8_t)f.read());
-            //}
-            //Serial.printf("\n\r");
-            //f.close();
-
-        
         }
         http.end();
     }
     else {
         Serial.println("RTC is ok, setting time to system clock");
         system_set_time(rtc_time);
-
     }
-
 }
 
 
-//void write_schedule(File * f) {
-//
-//    bool status;
-//    size_t len;
-//    Schedule msg;
-//    uint8_t buffer[128];
-//
-//    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-//    msg.version = 1;
-//    msg.events.funcs.encode = &enc_callback;
-//    msg.events.arg = nullptr;
-//
-//    status = pb_encode(&stream, Schedule_fields, &msg);
-//    len = stream.bytes_written;
-//
-//    Serial.printf("write len: %d\n\r", len);
-//
-//    f->write((char *)buffer, len);
-//}
+uint8_t decode_action(uint8_t msg_action) {
+
+    uint8_t action;
+
+    switch (msg_action) {
+        
+        case Operation_OP_OPEN:
+           action = OP_OPEN;
+           break;
+        
+        case Operation_OP_CLOSE:
+           action = OP_CLOSE;
+           break;
+        
+        case Operation_OP_SKIP:
+           action = OP_SKIP;
+           break;
+
+        default:
+           action = OP_NONE;
+            break;
+    }
+
+    return action;
+}
 
 
-//bool enc_callback(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg) {
-//
-//    ScheduleEntry ent;
-//
-//    if (field->tag == Schedule_events_tag) {
-//        ent = {
-//            true,
-//            true,
-//            true,
-//            WeekDay_EVR,
-//            true,
-//            Operation_OP_OPEN,
-//            true,
-//            16,
-//            true,
-//            33
-//        };
-//
-//        if (!pb_encode_tag_for_field(stream, field))
-//            return false;
-//
-//        if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
-//            return false;
-//
-//        ent = {
-//            true,
-//            true,
-//            true,
-//            WeekDay_EVR,
-//            true,
-//            Operation_OP_CLOSE,
-//            true,
-//            16,
-//            true,
-//            34
-//        };
-//
-//        if (!pb_encode_tag_for_field(stream, field))
-//            return false;
-//
-//        if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
-//            return false;
-//
-//    }
-//
-//    return true;
-//}
+size_t read_schedule(char * buffer, size_t buflen) {
 
+    size_t res = 0;
 
+    Serial.println("read schedule");
 
+    LittleFS.begin(true);
+    if (LittleFS.exists("/schedule.txt")) {
+
+        File f = LittleFS.open("/schedule.txt", "r");
+        res = f.readBytes(buffer, buflen);
+        f.close();
+    }
+    LittleFS.end();
+
+    return res;
+}
 
 
 void setup() {
 
     pinMode(PIN_SU, OUTPUT);
     pinMode(PIN_STBY, OUTPUT);
+    pinMode(PIN_LED_CONFIG, OUTPUT);
+    pinMode(PIN_CONFIG, INPUT);
 
     digitalWrite(PIN_SU, LOW);
     digitalWrite(PIN_STBY, LOW);
@@ -310,43 +274,26 @@ void setup() {
     rtc.init();
     soldrv.init(PIN_SU, PIN_STBY, PIN_H_A1, PIN_H_A2);
 
-    int config = 0;
+    int config;
 
-    delay(BOOT_DELAY);
-
-    //digitalWrite(PIN_H_A1, LOW);
-    //pinMode(PIN_H_A1, INPUT);
-    //config = ! digitalRead(PIN_H_A1);
+    delay(BOOT_DELAY * 9e2);
+    
+    digitalWrite(PIN_LED_CONFIG, HIGH);
+    delay(BOOT_DELAY * 1e2);
+    digitalWrite(PIN_LED_CONFIG, LOW);
+    
+    config = digitalRead(PIN_CONFIG);
 
     Serial.begin(115200);
     Serial.println("\n\nBOOT");
 
-    Serial.print("config: ");
-    Serial.println(config);
-
-    Serial.print("STASSID: ");
-    Serial.println(STASSID);
-
-    Serial.print("STAPSK: ");
-    Serial.println(STAPSK);
-
+    Serial.printf("config: %d\n\r", config);
+    Serial.printf("STASSID: %s\n\r", STASSID);
+    Serial.printf("STAPSK: %s\n\r", STAPSK);
 
     dir = 0;
 
     set_time_boot(config);
-
-    //LittleFS.begin();
-    //if (true) {
-    ////if (! LittleFS.exists("/schedule.txt")) {
-
-    //    Serial.println("Writing schedule");
-
-    //    File f = LittleFS.open("schedule.txt", "w");
-    //    write_schedule(&f);
-    //    f.close();
-    //}
-    //LittleFS.end();
-
     Serial.println("end setup\n");
 }
 
@@ -369,6 +316,10 @@ void loop() {
     Serial.println("");
 
     sleeptime = 0;
+    op = OP_NONE;
+    buflen = SCHEDULE_MAXLEN;
+    
+    buflen = read_schedule((char *)buffer, buflen);
 
     //while(1) {
     //    
@@ -381,17 +332,23 @@ void loop() {
     //    delay(5000);
  
     //}
+    //return;
 
 
-    wk.init(now);
+    wk.init(now, buffer, buflen, EVT_TOLERANCE);
 
     while(sleeptime == 0) {
 
-        wk.next_event(&op, &sleeptime);
+        wk.next_event(now, &op, &sleeptime);
+        
+        Serial.printf("op1: %X\n\r", op);
+        op = decode_action(op);
+        Serial.printf("op2: %X\n\r", op);
 
         switch (op) {
 
             case OP_SKIP:
+                Serial.println("Time to skip");
                 break;
 
             case OP_OPEN:
@@ -409,8 +366,22 @@ void loop() {
 
         }
     }
+    
+    time_t req_time = time(nullptr) - now;
+    if (req_time < 0) {
+        req_time = 0;
+    }
+    
+    Serial.printf("All action performed in %d sec\n\r", (uint32_t) req_time);
 
-    Serial.println("All action performed.");
+    if (sleeptime > SLEEP_MAX) {
+        sleeptime = SLEEP_MAX;
+    }
+    else {
+        sleeptime -= req_time;
+        sleeptime -= BOOT_DELAY;
+    }
+
     Serial.printf("Will sleep for: %d\n\r", sleeptime);
     sleeptime = sleeptime * 1e6;
     ESP.deepSleep(sleeptime);

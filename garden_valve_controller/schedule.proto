@@ -17,9 +17,10 @@ enum WeekDay {
 };
 
 enum Operation {
-    OP_SKIP = 0;
-    OP_OPEN = 1;
-    OP_CLOSE = 2;
+    OP_NONE = 0;
+    OP_SKIP = 1;
+    OP_OPEN = 2;
+    OP_CLOSE = 3;
 };
 
 

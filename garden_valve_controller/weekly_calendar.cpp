@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-
-#include "pb_encode.h"
 #include "pb_decode.h"
 
 #include "weekly_calendar.h"
@@ -47,9 +45,6 @@ uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
 
     //next event
     tmp += period;
-
-    //print_time_t("next_occurrence: ", tmp, 1);
-    //
 
     _events[_ev_next].time = tmp;
     _events[_ev_next].action = ent->op;
@@ -135,21 +130,21 @@ uint8_t WeeklyCalendar::next_event(
         now = time(nullptr);
         *sleeptime = (unsigned int)next - (unsigned int)now;
 
-        _write_log("%d\n", next);
-        _write_log("%d\n", now);
-        _write_log("%d\n", (unsigned int)*sleeptime);
+        _write_log("next event: %d\n", next);
+        _write_log("now: %d\n", now);
+        _write_log("sleeping for: %d\n", (unsigned int)*sleeptime);
 
-        if (*sleeptime > BOOT_DELAY) 
-            *sleeptime -= BOOT_DELAY;
+        //if (*sleeptime > BOOT_DELAY) 
+        //    *sleeptime -= BOOT_DELAY;
     
-        //if (*sleeptime < EVT_TOLERANCE) {
-        //    Serial.printf("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
-        //    *sleeptime = EVT_TOLERANCE;
+        ////if (*sleeptime < EVT_TOLERANCE) {
+        ////    Serial.printf("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
+        ////    *sleeptime = EVT_TOLERANCE;
+        ////}
+        //
+        //if (*sleeptime > SLEEP_MAX) {
+        //    *sleeptime = SLEEP_MAX;
         //}
-        
-        if (*sleeptime > SLEEP_MAX) {
-            *sleeptime = SLEEP_MAX;
-        }
     }
     
 

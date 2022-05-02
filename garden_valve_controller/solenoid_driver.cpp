@@ -1,4 +1,5 @@
-#include <ESP8266WiFi.h>
+#include <Arduino.h>
+#include <stdint.h>
 
 #include "garden_valve_controller.h"
 #include "solenoid_driver.h"
