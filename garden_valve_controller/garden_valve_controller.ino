@@ -4,24 +4,29 @@
 #include <sntp.h>
 #include <ctime>
 #include <HTTPClient.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
 
 #include "garden_valve_controller.h"
 #include "Ds1302.h"
 #include "weekly_calendar.h"
 #include "solenoid_driver.h"
 
-#define PIN_CLK 21
-#define PIN_DIO 22
+#define PIN_CLK 14
+#define PIN_DIO 27
 #define PIN_CE  2
 
 #define PIN_SU   16
 #define PIN_STBY 4 
 
-#define PIN_H_A1 21
-#define PIN_H_A2 22
+#define PIN_H_A1 14
+#define PIN_H_A2 27
 
-#define PIN_LED_CONFIG 23
+#define PIN_LED_CONFIG 19
 #define PIN_CONFIG 34
+#define DISPLAY_EN 23
 
 #define TIME_MIN 1640995200
 
@@ -54,6 +59,78 @@ size_t buflen;
 
 time_t now;
 struct tm tm_now;
+
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+
+void display_init() {
+
+    pinMode(DISPLAY_EN, OUTPUT);
+    digitalWrite(DISPLAY_EN, HIGH);
+    delay(1000);
+
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x32
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;);
+    }
+    //delay(2000);
+    display.clearDisplay();
+
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 10);
+    
+    char text[26];
+    now = time(nullptr);
+    wk.time_t_to_str(text, now, 0);
+
+    // Display static text
+    display.print(text);
+    display.display(); 
+    delay(5000);
+
+}
+
+
+void print_wakeup_reason(){
+  
+    esp_sleep_wakeup_cause_t wakeup_reason;
+
+    wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    switch(wakeup_reason){
+      
+      case ESP_SLEEP_WAKEUP_EXT0: 
+          Serial.println("Wakeup caused by external signal using RTC_IO"); 
+          break;
+      
+      case ESP_SLEEP_WAKEUP_EXT1: 
+          Serial.println("Wakeup caused by external signal using RTC_CNTL"); 
+          break;
+      
+      case ESP_SLEEP_WAKEUP_TIMER: 
+          Serial.println("Wakeup caused by timer"); 
+          break;
+      
+      case ESP_SLEEP_WAKEUP_TOUCHPAD: 
+          Serial.println("Wakeup caused by touchpad"); 
+          break;
+      
+      case ESP_SLEEP_WAKEUP_ULP: 
+          Serial.println("Wakeup caused by ULP program"); 
+          break;
+      
+      default: 
+          Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); 
+          break;
+    }
+    Serial.printf("\r");
+}
 
 
 //Callback called when NTP acquires time
@@ -175,6 +252,8 @@ void set_time_boot(int config) {
         Serial.println(WiFi.localIP());
 
         configTime(0, 0, "pool.ntp.org");
+        setenv("TZ", TZ, 3);
+        
         getLocalTime(&now_tm);
         wk.print_time_tm("localtime: ", &now_tm);
         time_is_set(true);
@@ -260,6 +339,10 @@ size_t read_schedule(char * buffer, size_t buflen) {
     return res;
 }
 
+void callback(){
+  //placeholder callback function
+}
+
 
 void setup() {
 
@@ -282,10 +365,16 @@ void setup() {
     delay(BOOT_DELAY * 1e2);
     digitalWrite(PIN_LED_CONFIG, LOW);
     
-    config = digitalRead(PIN_CONFIG);
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TOUCHPAD) {
+        config = 1;
+    }
+    else {
+        config = digitalRead(PIN_CONFIG);
+    }
 
     Serial.begin(115200);
     Serial.println("\n\nBOOT");
+    print_wakeup_reason();
 
     Serial.printf("config: %d\n\r", config);
     Serial.printf("STASSID: %s\n\r", STASSID);
@@ -294,7 +383,12 @@ void setup() {
     dir = 0;
 
     set_time_boot(config);
+
+    if (config) {
+        display_init();
+    }
     Serial.println("end setup\n");
+    
 }
 
 
@@ -341,9 +435,7 @@ void loop() {
 
         wk.next_event(now, &op, &sleeptime);
         
-        Serial.printf("op1: %X\n\r", op);
         op = decode_action(op);
-        Serial.printf("op2: %X\n\r", op);
 
         switch (op) {
 
@@ -384,6 +476,13 @@ void loop() {
 
     Serial.printf("Will sleep for: %d\n\r", sleeptime);
     sleeptime = sleeptime * 1e6;
+
+    esp_sleep_enable_touchpad_wakeup();
+    
+    #define Threshold 60
+    touchAttachInterrupt(T4, callback, Threshold);
+
+
     ESP.deepSleep(sleeptime);
 }
 

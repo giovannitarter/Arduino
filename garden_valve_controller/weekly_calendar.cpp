@@ -210,6 +210,20 @@ void WeeklyCalendar::print_time_tm(const char * text, struct tm * prt_time) {
     _write_log("%s%s\n\r", text, buffer);
 }
 
+void WeeklyCalendar::time_t_to_str(char * text, time_t t, uint8_t utc) {
+
+    struct tm tmp;
+
+    if (utc) {
+        gmtime_r(&t, &tmp);
+    }
+    else {
+        localtime_r(&t, &tmp);
+    }
+
+    strftime(text, 26, "%Y-%m-%d %H:%M:%S", &tmp);
+}
+
 
 void WeeklyCalendar::print_time_t(const char * text, time_t t, uint8_t utc) {
 

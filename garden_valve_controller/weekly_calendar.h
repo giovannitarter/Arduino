@@ -45,6 +45,7 @@ class WeeklyCalendar {
 
         void print_time_tm(const char * text, struct tm * prt_time);
         void print_time_t(const char * text, time_t t, uint8_t utc);
+        void time_t_to_str(char * text, time_t t, uint8_t utc);
 
         time_t _ctime;
 
