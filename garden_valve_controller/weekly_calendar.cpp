@@ -31,20 +31,56 @@ WeeklyCalendar::WeeklyCalendar() {
 }
 
 
+int WeeklyCalendar::get_timezone_offset(time_t time) {
+    
+    int offset;
+    struct tm gt, lt;
+
+    gmtime_r(&time, &gt);
+    localtime_r(&time, &lt);
+
+    //go on...
+    //much simpler with a working mktime
+    //still broken when localtime is on one month while 
+    //localtime is on the next or previous
+    offset = (lt.tm_mday - gt.tm_mday) * 60 * 60 * 24 +
+             (lt.tm_mday - gt.tm_mday) * 60 * 60 * 24 +
+             (lt.tm_hour - gt.tm_hour) * 60 * 60 +
+             (lt.tm_min - gt.tm_min) * 60 +
+             (lt.tm_sec - gt.tm_sec);
+    
+    return offset;
+}
+
+
 uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
 
     time_t time, period, offset, tmp;
+    int tz_offset_now, tz_offset_next;
 
     time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
     period = _get_period(ent->wday);
     offset = _get_offset(ent->wday, time);
 
+    tz_offset_now = get_timezone_offset(_ctime);
+    offset = offset - tz_offset_now;
+
     //last event
     tmp = _last_occurrence(offset, _ctime, period);
 
     //next event
     tmp += period;
+
+    tz_offset_next = get_timezone_offset(tmp);
+
+    //printf("tz_offset_now: %d\n", tz_offset_now);
+    //printf("tz_offset_next: %d\n", tz_offset_next);
+
+    tmp = tmp - (tz_offset_next - tz_offset_now);
+
+    //print_time_tm("next_occurrence lt: ", &lt);
+    //print_time_t("next_occurrence lt: ", tmp, 0);
 
     _events[_ev_next].time = tmp;
     _events[_ev_next].action = ent->op;
@@ -61,13 +97,13 @@ int compar(const void * a, const void * b) {
 
 
 uint8_t WeeklyCalendar::init(
-        time_t ctime, 
-        uint8_t * buffer, 
+        time_t ctime,
+        uint8_t * buffer,
         size_t len,
         uint32_t evt_precision
-        ) 
+        )
 {
-    
+
     uint8_t res = 0;
 
     _ev_nr = 0;
@@ -113,40 +149,30 @@ uint8_t WeeklyCalendar::next_event(
 
     uint8_t res = 0;
     time_t next;
-    
+
     *op = Operation_OP_NONE;
 
     next = _events[_next_exec].time;
-    if (next < _ctime + 2 * _evt_precision) 
+    if (next < _ctime + 2 * _evt_precision)
     {
         *op = _events[_next_exec].action;
         *sleeptime = 0;
-        _next_exec++;
-        
+
         _write_log("Performing action %d ", *op);
         print_time_t("scheduled at: ", _events[_next_exec].time, 0);
+
+        _next_exec++;
     }
     else {
         now = time(nullptr);
         *sleeptime = (unsigned int)next - (unsigned int)now;
 
-        _write_log("next event: %d\n", next);
-        _write_log("now: %d\n", now);
-        _write_log("sleeping for: %d\n", (unsigned int)*sleeptime);
+        //_write_log("%d\n", next);
+        //_write_log("%d\n", now);
+        //_write_log("%d\n", (unsigned int)*sleeptime);
 
-        //if (*sleeptime > BOOT_DELAY) 
-        //    *sleeptime -= BOOT_DELAY;
-    
-        ////if (*sleeptime < EVT_TOLERANCE) {
-        ////    Serial.printf("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
-        ////    *sleeptime = EVT_TOLERANCE;
-        ////}
-        //
-        //if (*sleeptime > SLEEP_MAX) {
-        //    *sleeptime = SLEEP_MAX;
-        //}
     }
-    
+
 
     return res;
 }
@@ -249,4 +275,5 @@ void WeeklyCalendar::_write_log(const char *format, ...)
     vprintf(format, args);
     va_end(args);
 }
+
 

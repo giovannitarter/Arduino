@@ -115,14 +115,19 @@ int main(int argc, char * argv[]) {
 
     time_t now;
 
-    //setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-    //now = 1648317600;
+
+
+    #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3"
+    //now = time(nullptr);
+    now = 1648317600;
     //now = 1667066400;
 
-    //setenv("TZ", "GMTGMT-1,M3.4.0/01,M10.4.0/02", 1);
+    //#define TIMEZONE "GMTGMT-1,M3.4.0/01,M10.4.0/02"
 
-    //setenv("TZ", "EST5EDT,M3.2.0,M11.1.0", 1);
+    //#define TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
     //now = 1667671200;
+    
+    setenv("TZ", TIMEZONE, 1);
 
     WeeklyCalendar wk;
     uint8_t buffer[256];
@@ -134,17 +139,6 @@ int main(int argc, char * argv[]) {
     len = 256;
     write_schedule(buffer, &len);
     printf("len: %d\n", len);
-
-    //current time
-    //now = time(nullptr);
-
-    //setting now to 2022-10-29 18.00.00
-    //to test daylight save time change
-
-    //struct tm lt = {0};
-    //localtime_r(&now, &lt);
-    //printf("Offset to GMT is %lds.\n", lt.tm_gmtoff);
-    //printf("The time zone is '%s'.\n", lt.tm_zone);
 
     for(int i=0; i<5; i++) {
 

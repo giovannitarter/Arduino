@@ -29,11 +29,34 @@ WeeklyCalendar::WeeklyCalendar() {
 }
 
 
+int WeeklyCalendar::get_timezone_offset(time_t time) {
+    
+    int offset;
+    struct tm tmp = {0};
+    time_t lt;
+    
+    #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3"
+    
+    localtime_r(&time, &tmp);
+    
+    setenv("TZ", "UTC", 1);
+    tzset();
+    tmp.tm_isdst = 0;
+    lt = mktime(&tmp);
+    
+    setenv("TZ", TIMEZONE, 1);
+    tzset();
+    
+    offset = lt - time;
+    return(offset);
+}
+
+
 uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
 
     time_t time, period, offset, tmp;
-    struct tm lt = {0};
     int tz_offset_now, tz_offset_next;
+    struct tm lt = {0};
 
     time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
@@ -44,6 +67,7 @@ uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
     localtime_r(&_ctime, &lt);
     tz_offset_now = lt.tm_gmtoff;
     offset = offset - tz_offset_now;
+    printf("offset: %d vs %d\n", tz_offset_now, get_timezone_offset(_ctime));
 
     //last event
     tmp = _last_occurrence(offset, _ctime, period);
@@ -227,6 +251,20 @@ void WeeklyCalendar::print_time_tm(const char * text, struct tm * prt_time) {
     _write_log("%s%s\n\r", text, buffer);
 }
 
+void WeeklyCalendar::time_t_to_str(char * text, time_t t, uint8_t utc) {
+
+    struct tm tmp;
+
+    if (utc) {
+        gmtime_r(&t, &tmp);
+    }
+    else {
+        localtime_r(&t, &tmp);
+    }
+
+    strftime(text, 26, "%Y-%m-%d %H:%M:%S", &tmp);
+}
+
 
 void WeeklyCalendar::print_time_t(const char * text, time_t t, uint8_t utc) {
 
@@ -252,7 +290,5 @@ void WeeklyCalendar::_write_log(const char *format, ...)
     vprintf(format, args);
     va_end(args);
 }
-
-
 
 

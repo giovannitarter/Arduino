@@ -16,6 +16,7 @@
 
 #define MAX_EVENTS 10
 
+
 typedef struct event {
     time_t time;
     uint8_t action;
@@ -42,6 +43,7 @@ class WeeklyCalendar {
                 );
 
         uint8_t add_event(ScheduleEntry * ent);
+        int get_timezone_offset(time_t time);
 
         void print_time_tm(const char * text, struct tm * prt_time);
         void print_time_t(const char * text, time_t t, uint8_t utc);
