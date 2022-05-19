@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <pb_encode.h>
 
 #include "weekly_calendar.h"
@@ -48,7 +49,7 @@ bool enc_callback(pb_ostream_t *stream, const pb_field_iter_t *field, void * con
 
         if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
             return false;
-        
+
         ent = {
             true,
             true,
@@ -67,7 +68,7 @@ bool enc_callback(pb_ostream_t *stream, const pb_field_iter_t *field, void * con
 
         if (!pb_encode_submessage(stream, ScheduleEntry_fields, &ent))
             return false;
-        
+
         ent = {
             true,
             true,
@@ -112,10 +113,20 @@ void write_schedule(uint8_t * buffer, size_t * len) {
 
 int main(int argc, char * argv[]) {
 
+    time_t now;
+
+    //setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    //now = 1648317600;
+    //now = 1667066400;
+
+    //setenv("TZ", "GMTGMT-1,M3.4.0/01,M10.4.0/02", 1);
+
+    //setenv("TZ", "EST5EDT,M3.2.0,M11.1.0", 1);
+    //now = 1667671200;
+
     WeeklyCalendar wk;
     uint8_t buffer[256];
     size_t len;
-    time_t now;
 
     uint32_t sleeptime;
     uint8_t op;
@@ -123,11 +134,20 @@ int main(int argc, char * argv[]) {
     len = 256;
     write_schedule(buffer, &len);
     printf("len: %d\n", len);
-    
-    now = time(nullptr);
 
-    for(int i; i<5; i++) {
-        
+    //current time
+    //now = time(nullptr);
+
+    //setting now to 2022-10-29 18.00.00
+    //to test daylight save time change
+
+    //struct tm lt = {0};
+    //localtime_r(&now, &lt);
+    //printf("Offset to GMT is %lds.\n", lt.tm_gmtoff);
+    //printf("The time zone is '%s'.\n", lt.tm_zone);
+
+    for(int i=0; i<5; i++) {
+
         printf("\n========================\n");
         sleeptime = 0;
         op = Operation_OP_NONE;
@@ -139,7 +159,7 @@ int main(int argc, char * argv[]) {
 
         now += sleeptime;
     }
-   
+
     return 0;
 
 }

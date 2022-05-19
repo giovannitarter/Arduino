@@ -32,11 +32,18 @@ WeeklyCalendar::WeeklyCalendar() {
 uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
 
     time_t time, period, offset, tmp;
+    struct tm lt = {0};
+    int tz_offset_now, tz_offset_next;
 
     time = ent->start_hou * SECS_PER_HOU + ent->start_min * SECS_PER_MIN;
 
     period = _get_period(ent->wday);
     offset = _get_offset(ent->wday, time);
+
+    //Broken on first event after daylight savings time change
+    localtime_r(&_ctime, &lt);
+    tz_offset_now = lt.tm_gmtoff;
+    offset = offset - tz_offset_now;
 
     //last event
     tmp = _last_occurrence(offset, _ctime, period);
@@ -44,9 +51,17 @@ uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
     //next event
     tmp += period;
 
-    //print_time_t("next_occurrence: ", tmp, 1);
-    //
-    
+    localtime_r(&tmp, &lt);
+    tz_offset_next = lt.tm_gmtoff;
+
+    //printf("tz_offset_now: %d\n", tz_offset_now);
+    //printf("tz_offset_next: %d\n", tz_offset_next);
+
+    tmp = tmp - (tz_offset_next - tz_offset_now);
+
+    //print_time_tm("next_occurrence lt: ", &lt);
+    //print_time_t("next_occurrence lt: ", tmp, 0);
+
     _events[_ev_next].time = tmp;
     _events[_ev_next].action = ent->op;
     _ev_next = (_ev_next + 1) % MAX_EVENTS;
@@ -62,13 +77,13 @@ int compar(const void * a, const void * b) {
 
 
 uint8_t WeeklyCalendar::init(
-        time_t ctime, 
-        uint8_t * buffer, 
+        time_t ctime,
+        uint8_t * buffer,
         size_t len,
         uint32_t evt_precision
-        ) 
+        )
 {
-    
+
     uint8_t res = 0;
 
     _ev_nr = 0;
@@ -85,6 +100,7 @@ uint8_t WeeklyCalendar::init(
     }
 
     _write_log("ref time: %d\n\r", (unsigned int)ctime);
+    print_time_t("ref time: ", (unsigned int)ctime, 0);
 
     Schedule msg;
     pb_istream_t istream;
@@ -99,7 +115,7 @@ uint8_t WeeklyCalendar::init(
 
     for(int i=0; i<_ev_nr; i++) {
         _write_log("%d -> action: %X ", i, _events[i].action);
-        print_time_t("time: ", _events[i].time, 0);
+        print_time_t("ltime: ", _events[i].time, 0);
     }
     return 0;
 }
@@ -114,29 +130,30 @@ uint8_t WeeklyCalendar::next_event(
 
     uint8_t res = 0;
     time_t next;
-    
+
     *op = Operation_OP_NONE;
 
     next = _events[_next_exec].time;
-    if (next < _ctime + 2 * _evt_precision) 
+    if (next < _ctime + 2 * _evt_precision)
     {
         *op = _events[_next_exec].action;
         *sleeptime = 0;
-        _next_exec++;
-        
+
         _write_log("Performing action %d ", *op);
         print_time_t("scheduled at: ", _events[_next_exec].time, 0);
+
+        _next_exec++;
     }
     else {
         *sleeptime = (unsigned int)next - (unsigned int)now;
 
-        _write_log("%d\n", next);
-        _write_log("%d\n", now);
-        _write_log("%d\n", (unsigned int)*sleeptime);
+        //_write_log("%d\n", next);
+        //_write_log("%d\n", now);
+        //_write_log("%d\n", (unsigned int)*sleeptime);
 
-        //if (*sleeptime > BOOT_DELAY) 
+        //if (*sleeptime > BOOT_DELAY)
         //    *sleeptime -= BOOT_DELAY;
-    
+
         ////if (*sleeptime < EVT_TOLERANCE) {
         ////    _write_log("sleeptime set to %d, fixed to %d\n\r", *sleeptime, EVT_TOLERANCE);
         ////    *sleeptime = EVT_TOLERANCE;
@@ -146,7 +163,7 @@ uint8_t WeeklyCalendar::next_event(
         //    *sleeptime = SLEEP_MAX;
         //}
     }
-    
+
 
     return res;
 }
