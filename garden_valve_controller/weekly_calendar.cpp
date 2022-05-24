@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sntp.h>
+#include <Arduino.h>
 
 #include "pb_decode.h"
 
@@ -33,7 +35,7 @@ WeeklyCalendar::WeeklyCalendar() {
 
 int WeeklyCalendar::get_timezone_offset(time_t time) {
     
-    int offset;
+    int offset, yoffset;
     struct tm gt, lt;
 
     gmtime_r(&time, &gt);
@@ -41,16 +43,50 @@ int WeeklyCalendar::get_timezone_offset(time_t time) {
 
     //go on...
     //much simpler with a working mktime
-    //still broken when localtime is on one month while 
+    //still broken when localtime is on one year while 
     //localtime is on the next or previous
-    offset = (lt.tm_mday - gt.tm_mday) * 60 * 60 * 24 +
-             (lt.tm_mday - gt.tm_mday) * 60 * 60 * 24 +
-             (lt.tm_hour - gt.tm_hour) * 60 * 60 +
-             (lt.tm_min - gt.tm_min) * 60 +
-             (lt.tm_sec - gt.tm_sec);
-    
+    offset = (
+            (lt.tm_hour - gt.tm_hour) * 60 +
+            (lt.tm_min - gt.tm_min)
+            );
+
+    yoffset = lt.tm_yday - gt.tm_yday;
+    if (yoffset < 0) {
+        offset += 60 * 24;
+    }
+    else {
+        offset += yoffset * 60 * 24;
+    }
+
+    offset = offset * 60;
     return offset;
 }
+
+
+//int WeeklyCalendar::get_timezone_offset(time_t time) {
+//    
+//    int offset;
+//    struct tm tmp;
+//    time_t ltime;
+//
+//    localtime_r(&time, &tmp);
+//    
+//    #define TZ "CET-1CEST,M3.5.0/2,M10.5.0/3"
+//    
+//    configTime(0, 0, "pool.ntp.org");
+//    setenv("TZ", "UTC", 3);
+//    tzset();
+//    
+//    ltime = mktime(&tmp);
+//    
+//    configTime(0, 0, "pool.ntp.org");
+//    setenv("TZ", TZ, 3);
+//    tzset();
+//
+//    offset = time - ltime;
+//    
+//    return offset;
+//}
 
 
 uint8_t WeeklyCalendar::add_event(ScheduleEntry * ent) {
@@ -175,6 +211,11 @@ uint8_t WeeklyCalendar::next_event(
 
 
     return res;
+}
+
+
+time_t WeeklyCalendar::get_next_event_time() {
+    return(_events[_next_exec].time);
 }
 
 

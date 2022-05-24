@@ -45,8 +45,12 @@
 //Globals
 int dir;
 const int VALVE_DELAY = BOOT_DELAY + CAP_CHARGE_TIME + SOLENOID_PULSE_TIME;
+int use_display;
+int config;
+esp_sleep_wakeup_cause_t wakeup_reason;
 
 #define TZ "CET-1CEST,M3.5.0/2,M10.5.0/3"
+
 
 Ds1302 rtc = Ds1302(PIN_CE, PIN_CLK, PIN_DIO);
 WeeklyCalendar wk = WeeklyCalendar();
@@ -75,10 +79,9 @@ void display_init() {
     delay(1000);
 
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x32
-      Serial.println(F("SSD1306 allocation failed"));
-      for(;;);
+        Serial.println(F("SSD1306 allocation failed"));
+        return;
     }
-    //delay(2000);
     display.clearDisplay();
 
     display.setTextSize(1);
@@ -92,8 +95,6 @@ void display_init() {
     // Display static text
     display.print(text);
     display.display(); 
-    delay(5000);
-
 }
 
 
@@ -206,7 +207,6 @@ void set_time_boot(int config) {
 
     //settimeofday_cb(time_is_set);
 
-    configTime(0, 0, "pool.ntp.org");
     setenv("TZ", TZ, 3);
     tzset();
 
@@ -251,11 +251,12 @@ void set_time_boot(int config) {
         Serial.println("IP address: ");
         Serial.println(WiFi.localIP());
 
-        configTime(0, 0, "pool.ntp.org");
         setenv("TZ", TZ, 3);
-        
-        getLocalTime(&now_tm);
-        wk.print_time_tm("localtime: ", &now_tm);
+        tzset();
+
+        sntp_setoperatingmode(SNTP_OPMODE_POLL);
+        sntp_setservername(0, "pool.ntp.org");
+        sntp_init();
         time_is_set(true);
 
         WiFiClient client;
@@ -345,6 +346,10 @@ void callback(){
 
 
 void setup() {
+    
+    dir = 0;
+    use_display = 0;
+    wakeup_reason = esp_sleep_get_wakeup_cause();
 
     pinMode(PIN_SU, OUTPUT);
     pinMode(PIN_STBY, OUTPUT);
@@ -357,16 +362,18 @@ void setup() {
     rtc.init();
     soldrv.init(PIN_SU, PIN_STBY, PIN_H_A1, PIN_H_A2);
 
-    int config;
-
     delay(BOOT_DELAY * 9e2);
     
     digitalWrite(PIN_LED_CONFIG, HIGH);
     delay(BOOT_DELAY * 1e2);
     digitalWrite(PIN_LED_CONFIG, LOW);
     
-    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TOUCHPAD) {
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_TOUCHPAD) {
         config = 1;
+        use_display = 1;
+    }
+    else if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        use_display = 1; 
     }
     else {
         config = digitalRead(PIN_CONFIG);
@@ -374,21 +381,28 @@ void setup() {
 
     Serial.begin(115200);
     Serial.println("\n\nBOOT");
-    print_wakeup_reason();
+    //print_wakeup_reason();
 
     Serial.printf("config: %d\n\r", config);
+    Serial.printf("use_display: %d\n\r", use_display);
     Serial.printf("STASSID: %s\n\r", STASSID);
     Serial.printf("STAPSK: %s\n\r", STAPSK);
 
-    dir = 0;
-
     set_time_boot(config);
-
-    if (config) {
-        display_init();
-    }
-    Serial.println("end setup\n");
     
+    if (use_display) {
+        Serial.println("Display init\n");
+        display_init();
+        Serial.println("Display init end\n");
+    }
+
+    time_t test = time(nullptr);
+    if (test < TIME_MIN) {
+        Serial.println("ERROR, cannot get synch\n");
+        soldrv.close_valve();
+    }
+
+    Serial.println("end setup\n");
 }
 
 
@@ -430,6 +444,21 @@ void loop() {
 
 
     wk.init(now, buffer, buflen, EVT_TOLERANCE);
+    
+    if (use_display) {
+    
+        display.setTextSize(1);
+        display.setTextColor(WHITE);
+        display.setCursor(0, 20);
+    
+        char text[26];
+        time_t next_evt_time = wk.get_next_event_time();
+        wk.time_t_to_str(text, next_evt_time, 0);
+
+        // Display static text
+        display.print(text);
+        display.display(); 
+    }
 
     while(sleeptime == 0) {
 
@@ -459,6 +488,11 @@ void loop() {
         }
     }
     
+    if (use_display) {
+        while(millis() < MIN_DISPLAY * 1e3) 
+        delay(100);
+    }
+    
     time_t req_time = time(nullptr) - now;
     if (req_time < 0) {
         req_time = 0;
@@ -468,6 +502,9 @@ void loop() {
 
     if (sleeptime > SLEEP_MAX) {
         sleeptime = SLEEP_MAX;
+    }
+    else if (sleeptime < SLEEP_MIN) {
+        sleeptime = SLEEP_MIN;
     }
     else {
         sleeptime -= req_time;
@@ -479,8 +516,8 @@ void loop() {
 
     esp_sleep_enable_touchpad_wakeup();
     
-    #define Threshold 60
-    touchAttachInterrupt(T4, callback, Threshold);
+    touchAttachInterrupt(T4, callback, TOUCH_THRESHOLD);
+
 
 
     ESP.deepSleep(sleeptime);

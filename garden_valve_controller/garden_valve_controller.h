@@ -7,12 +7,17 @@
 #define BOOT_DELAY 1 //sec
 
 #define EVT_TOLERANCE 10 //sec
-#define SLEEP_MAX 30 //sec
+#define SLEEP_MAX 60 * 60 * 2 //sec
+#define SLEEP_MIN 5  //sec
+
+#define MIN_DISPLAY 7 //sec
 
 #define OP_NONE  0x00
 #define OP_SKIP  0x10
 #define OP_OPEN  0x11
 #define OP_CLOSE 0x12
+    
+#define TOUCH_THRESHOLD 60
 
 
 uint8_t decode_action(uint8_t msg_action);

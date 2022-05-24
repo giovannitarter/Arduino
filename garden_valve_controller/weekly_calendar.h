@@ -41,6 +41,7 @@ class WeeklyCalendar {
                 uint8_t *op,
                 uint32_t * sleeptime
                 );
+        time_t get_next_event_time();
 
         uint8_t add_event(ScheduleEntry * ent);
         int get_timezone_offset(time_t time);
